@@ -1,0 +1,14 @@
+[
+  {
+    "turnstile_id": "catraca-01",
+    "camera_id": "camera-01",
+    "passage_timeout": 15,
+    "max_pending_age": 2
+  },
+  {
+    "turnstile_id": "catraca-02",
+    "camera_id": "camera-02",
+    "passage_timeout": 5,
+    "max_pending_age": 2
+  }
+]
