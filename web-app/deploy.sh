@@ -4,7 +4,7 @@ set -e
 
 PID_FILE="./app.pid"
 LOG_FILE="./app.log"
-PORT=80
+PORT=8080
 
 case "$1" in
 
