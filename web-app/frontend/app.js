@@ -9,10 +9,10 @@ let currentPayloadData = null;
 const STORAGE_SESSION_KEY = "cracha_session_auth";
 const STORAGE_CACHED_PAYLOAD_KEY = "cracha_cached_payload";
 
-// Determina a URL base da API
-const API_BASE = (window.location.protocol.startsWith("http") && window.location.port === "8080")
-  ? ""
-  : "http://localhost:8080";
+// A API e o frontend são servidos pelo mesmo processo (mesma origem),
+// então usa-se URL relativa: funciona em dev (localhost:8080) e em produção
+// (IP/domínio externo, qualquer porta) sem depender de onde a página é aberta.
+const API_BASE = "";
 
 document.addEventListener("DOMContentLoaded", () => {
   const session = getSavedSession();
