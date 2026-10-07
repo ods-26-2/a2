@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from datetime import datetime, date, time, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 
 backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
@@ -11,7 +11,7 @@ from utils.AES256 import encrypt
 from db.connection import get_user_by_cpf
 
 
-def cpf_base(cpf: int | str) -> int:
+def cpf_base(cpf: Union[int, str]) -> int:
     digits = "".join(ch for ch in str(cpf) if ch.isdigit())
     return int(digits[:9]) if digits else 0
 
