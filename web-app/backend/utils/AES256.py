@@ -1,10 +1,11 @@
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from typing import Union
 
 key = b"a"*32  # chave temporária
 
 
-def encrypt(data: bytes | str) -> bytes:
+def encrypt(data: Union[bytes, str]) -> bytes:
     """Encripta dados com AES-256-ECB. O dado deve ser múltiplo de 16 bytes."""
     payload_bytes = data.encode() if isinstance(data, str) else data
 
