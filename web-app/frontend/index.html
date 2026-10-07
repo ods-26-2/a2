@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Crachá QR</title>
+  <link rel="stylesheet" href="fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      try {
+        var s = sessionStorage.getItem("cracha_session_auth") || localStorage.getItem("cracha_session_auth");
+        if (s && JSON.parse(s).cpf) {
+          document.documentElement.classList.add("is-logged");
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+
+  <div class="app-wrapper">
+    <!-- TELA DE LOGIN -->
+    <div id="loginView" class="screen">
+      <div class="login-pane">
+        <div class="brand">
+          <i class="fa-solid fa-qrcode"></i>
+          <h2>Acesso</h2>
+        </div>
+
+        <div id="loginError" class="login-error" style="display: none;"></div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="input-group">
+            <label for="cpf">CPF</label>
+            <div class="input-box">
+              <i class="fa-solid fa-id-card"></i>
+              <input type="tel" id="cpf" placeholder="000.000.000-00" required inputmode="numeric" maxlength="14" oninput="maskCPF(this)" autocomplete="username">
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="password">Senha</label>
+            <div class="input-box">
+              <i class="fa-solid fa-lock"></i>
+              <input type="password" id="password" placeholder="Sua senha" required autocomplete="current-password">
+            </div>
+          </div>
+
+          <button type="submit" id="btnEntrar" class="btn-entrar">
+            <span id="btnText">Entrar</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- TELA DO QR CODE -->
+    <div id="qrView" class="screen" style="display: none;">
+      <header class="qr-bar-top">
+        <span class="user-tag">
+          <i class="fa-solid fa-id-card"></i>
+          <span id="displayCpf"></span>
+        </span>
+        <button type="button" class="btn-sair" onclick="handleLogout()" title="Sair">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        </button>
+      </header>
+
+      <main class="qr-area">
+        <div id="qrcode"></div>
+        <div id="qrLoading" class="qr-loading" style="display: none;">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+          <span>Atualizando payload...</span>
+        </div>
+      </main>
+
+      <footer class="qr-bar-bottom">
+        <div class="validity-info">
+          <i class="fa-regular fa-clock"></i>
+          <span id="validityDisplay"></span>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <script src="qrcode.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

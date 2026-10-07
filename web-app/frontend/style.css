@@ -1,0 +1,335 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: #E5E7EB;
+  color: #1F2937;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* O app ocupa a tela inteira (sem simular um aparelho) */
+.app-wrapper {
+  width: 100%;
+  height: 100%;
+  background-color: #F0F0F0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #F0F0F0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ==========================================================================
+   TELA DE LOGIN
+   ========================================================================== */
+
+.login-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.brand i {
+  font-size: 44px;
+  color: #1F2937;
+  margin-bottom: 12px;
+}
+
+.brand h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.5px;
+}
+
+.login-error {
+  background-color: #FEE2E2;
+  border: 1px solid #F87171;
+  color: #B91C1C;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  text-align: center;
+  font-weight: 500;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.input-group {
+  margin-bottom: 16px;
+}
+
+.input-group label {
+  display: block;
+  font-size: 13px;
+  color: #4B5563;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.input-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-box i {
+  position: absolute;
+  left: 14px;
+  color: #9CA3AF;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.input-box input {
+  width: 100%;
+  padding: 14px 14px 14px 44px;
+  background-color: #FFFFFF;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  color: #111827;
+  font-size: 16px;
+  font-family: inherit;
+  user-select: text;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-box input:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.btn-entrar {
+  width: 100%;
+  background-color: #2563EB;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  transition: background-color 0.15s, transform 0.05s;
+}
+
+.btn-entrar:hover {
+  background-color: #1D4ED8;
+}
+
+.btn-entrar:active {
+  background-color: #1E40AF;
+  transform: scale(0.98);
+}
+
+.btn-entrar:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   TELA DO QR CODE
+   ========================================================================== */
+
+.qr-bar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 8px;
+  height: 58px;
+  flex-shrink: 0;
+}
+
+.user-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.user-tag i {
+  color: #2563EB;
+}
+
+.btn-sair {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: #4B5563;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+}
+
+.btn-sair:hover {
+  background: #FEE2E2;
+  color: #DC2626;
+  border-color: #FCA5A5;
+}
+
+.qr-area {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: #F0F0F0;
+  position: relative;
+  overflow: hidden;
+}
+
+#qrcode {
+  /* Ocupa 80% da tela, na vertical (altura) ou na horizontal (largura) */
+  width: min(80vw, 80vh);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border: 16px solid #FFFFFF;
+  background-color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+}
+
+#qrcode canvas, #qrcode img {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+.qr-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(240, 240, 240, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  z-index: 10;
+}
+
+.qr-loading i {
+  font-size: 24px;
+  color: #2563EB;
+}
+
+.qr-bar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px 16px;
+  height: 60px;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.validity-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  padding: 8px 12px;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.validity-info i {
+  color: #10B981;
+}
+
+.qr-bar-bottom {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 20px;
+  height: 60px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   VISIBILIDADE IMEDIATA (Zero flicker ao carregar ou recarregar página)
+   ========================================================================== */
+
+html.is-logged #loginView {
+  display: none !important;
+}
+
+html.is-logged #qrView {
+  display: flex !important;
+}
+
+html:not(.is-logged) #qrView {
+  display: none !important;
+}
+
+html:not(.is-logged) #loginView {
+  display: flex !important;
+}
