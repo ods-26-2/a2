@@ -130,11 +130,17 @@ function hexToBytes(hex) {
 
 async function fetchLatestPayload(cpf, password) {
   const cleanCpf = cpf.toString().replace(/\D/g, "");
-  const url = `${API_BASE}/get-payload?cpf=${encodeURIComponent(cleanCpf)}&password=${encodeURIComponent(password)}`;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { "Accept": "application/json" },
+  const response = await fetch(`${API_BASE}/get-payload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({
+      cpf: Number(cleanCpf),
+      password: password
+    })
   });
 
   if (!response.ok) {

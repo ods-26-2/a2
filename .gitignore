@@ -17,3 +17,7 @@ backend/db/data/
 
 **/*.log
 **/*.pid
+
+web-app/design-system.md
+
+.gemini

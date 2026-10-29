@@ -53,6 +53,7 @@ def _init_schema(conn: sqlite3.Connection):
             password_hash TEXT NOT NULL,
             is_recurring INTEGER NOT NULL DEFAULT 1,
             specific_date DATE,
+            expiration_date DATE,
             access_days TEXT NOT NULL,
             access_hours TEXT NOT NULL,
             active INTEGER NOT NULL DEFAULT 1,
@@ -61,6 +62,12 @@ def _init_schema(conn: sqlite3.Connection):
         )
     """)
 
+    cursor.execute("PRAGMA table_info(users)")
+    existing_cols = [row[1] for row in cursor.fetchall()]
+    if "expiration_date" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN expiration_date DATE")
+
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS system_config (
             key TEXT PRIMARY KEY,
@@ -68,11 +75,38 @@ def _init_schema(conn: sqlite3.Connection):
             updated_at DATETIME NOT NULL
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admins (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            created_at DATETIME NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admin_tokens (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL
+        )
+    """)
     conn.commit()
 
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
         seed_default_data(conn)
+
+    cursor.execute("SELECT COUNT(*) FROM admins")
+    if cursor.fetchone()[0] == 0:
+        now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT OR IGNORE INTO admins (username, password_hash, created_at)
+            VALUES (?, ?, ?)
+        """, ("admin", hash_password("admin123"), now_dt))
+        conn.commit()
+
 
 
 def seed_default_data(conn: sqlite3.Connection, force: bool = False):
@@ -133,18 +167,20 @@ def init_db(force: bool = False):
 
 def add_user(
     cpf: int,
-    password: str,
+    password: Optional[str] = None,
     is_recurring: bool = True,
     specific_date: Optional[Union[str, date, datetime]] = None,
+    expiration_date: Optional[Union[str, date, datetime]] = None,
     access_days: Optional[List[int]] = None,
     access_hours: Optional[Dict[str, str]] = None,
-    active: bool = True,
 ) -> bool:
     """Adiciona ou atualiza um usuário no banco SQLite identificado apenas por CPF.
     
     is_recurring:
       - True (padrão): acesso recorrente baseado em access_days (dias 0 a 6).
       - False: acesso único baseado em specific_date ('YYYY-MM-DD').
+    expiration_date:
+      - Data limite até a qual o crachá/recorrência é válido ('YYYY-MM-DD').
     """
     conn = get_connection()
     try:
@@ -161,28 +197,45 @@ def add_user(
             else:
                 date_str = str(specific_date).strip()[:10]
 
+        exp_str = None
+        if expiration_date:
+            if isinstance(expiration_date, (datetime, date)):
+                exp_str = expiration_date.strftime("%Y-%m-%d")
+            else:
+                exp_str = str(expiration_date).strip()[:10]
+
         cursor = conn.cursor()
+
+        if password:
+            password_hash_value = hash_password(password)
+        else:
+            cursor.execute("SELECT password_hash FROM users WHERE cpf = ?", (int(cpf),))
+            existing_row = cursor.fetchone()
+            if not existing_row:
+                return False
+            password_hash_value = existing_row["password_hash"]
+
         cursor.execute("""
             INSERT INTO users (
-                cpf, password_hash, is_recurring, specific_date,
+                cpf, password_hash, is_recurring, specific_date, expiration_date,
                 access_days, access_hours, active, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             ON CONFLICT(cpf) DO UPDATE SET
                 password_hash = excluded.password_hash,
                 is_recurring = excluded.is_recurring,
                 specific_date = excluded.specific_date,
+                expiration_date = excluded.expiration_date,
                 access_days = excluded.access_days,
                 access_hours = excluded.access_hours,
-                active = excluded.active,
                 updated_at = excluded.updated_at
         """, (
             int(cpf),
-            hash_password(password),
+            password_hash_value,
             1 if is_recurring else 0,
             date_str,
+            exp_str,
             json.dumps(access_days),
             json.dumps(access_hours),
-            1 if active else 0,
             now_dt,
             now_dt,
         ))
@@ -207,7 +260,9 @@ def _parse_user_row(row: sqlite3.Row) -> Dict[str, Any]:
     user["active"] = bool(user.get("active", 1))
     user["is_recurring"] = bool(user.get("is_recurring", 1))
     user["specific_date"] = user.get("specific_date")
+    user["expiration_date"] = user.get("expiration_date")
     return user
+
 
 
 def get_user_by_cpf(cpf: int) -> Optional[Dict[str, Any]]:
@@ -229,12 +284,25 @@ def validate_user_access(cpf: int, password: str) -> Tuple[bool, str, Optional[D
         if not user:
             return False, "Usuário não encontrado", None
 
-        if not user.get("active", True):
-            return False, "Usuário desativado no sistema", None
-
         password_hash = user.get("password_hash", "")
         if not check_password(password, password_hash):
             return False, "Senha incorreta", None
+
+        if user.get("expiration_date"):
+            try:
+                exp_date = date.fromisoformat(str(user["expiration_date"])[:10])
+                if date.today() > exp_date:
+                    return False, f"Acesso recorrente expirado em {exp_date.strftime('%d/%m/%Y')}", None
+            except Exception:
+                pass
+
+        if not user.get("is_recurring", True) and user.get("specific_date"):
+            try:
+                spec_date = date.fromisoformat(str(user["specific_date"])[:10])
+                if date.today() > spec_date:
+                    return False, f"Acesso válido apenas para a data {spec_date.strftime('%d/%m/%Y')}", None
+            except Exception:
+                pass
 
         return True, "Autenticado com sucesso", user
 
@@ -292,3 +360,164 @@ def set_payload_batch_size(new_batch_size: int) -> bool:
             conn.close()
     except Exception:
         return False
+
+
+def get_all_users() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        return [_parse_user_row(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def delete_user_by_cpf(cpf: int) -> bool:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE cpf = ?", (int(cpf),))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def update_user_expiration(
+    cpf: int,
+    expiration_date: Optional[Union[str, date, datetime]] = None,
+    specific_date: Optional[Union[str, date, datetime]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Atualiza a data de validade (e opcionalmente a data inicial) de um usuário específico."""
+    conn = get_connection()
+    try:
+        now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        exp_str = None
+        if expiration_date:
+            if isinstance(expiration_date, (datetime, date)):
+                exp_str = expiration_date.strftime("%Y-%m-%d")
+            else:
+                clean = str(expiration_date).strip()
+                exp_str = clean[:10] if clean else None
+
+        cursor = conn.cursor()
+        if specific_date is not None:
+            if isinstance(specific_date, (datetime, date)):
+                spec_str = specific_date.strftime("%Y-%m-%d")
+            else:
+                clean_s = str(specific_date).strip()
+                spec_str = clean_s[:10] if clean_s else None
+
+            cursor.execute(
+                """
+                UPDATE users
+                SET expiration_date = ?, specific_date = ?, updated_at = ?
+                WHERE cpf = ?
+                """,
+                (exp_str, spec_str, now_dt, int(cpf)),
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE users
+                SET expiration_date = ?, updated_at = ?
+                WHERE cpf = ?
+                """,
+                (exp_str, now_dt, int(cpf)),
+            )
+        conn.commit()
+        if cursor.rowcount == 0:
+            return None
+        return get_user_by_cpf(int(cpf))
+    finally:
+        conn.close()
+
+
+def update_admin_password(username: str, new_password: str) -> bool:
+    try:
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE admins SET password_hash = ? WHERE username = ?",
+                (hash_password(new_password), username.strip()),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
+def validate_admin_credentials(username: str, password: str) -> bool:
+    if not username or not password:
+        return False
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT password_hash FROM admins WHERE username = ?", (username.strip(),))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        return check_password(password, row["password_hash"])
+    finally:
+        conn.close()
+
+
+def create_admin_session(username: str, duration_hours: int = 24) -> str:
+    import secrets
+    token = secrets.token_hex(32)
+    now = datetime.now()
+    now_dt = now.strftime("%Y-%m-%d %H:%M:%S")
+    exp_dt = (now + timedelta(hours=duration_hours)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO admin_tokens (token, username, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token, username.strip(), now_dt, exp_dt),
+        )
+        conn.commit()
+        return token
+    finally:
+        conn.close()
+
+
+def verify_admin_session(token: str) -> Optional[str]:
+    if not token:
+        return None
+    conn = get_connection()
+    try:
+        now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT username FROM admin_tokens
+            WHERE token = ? AND expires_at > ?
+            """,
+            (token.strip(), now_dt),
+        )
+        row = cursor.fetchone()
+        return row["username"] if row else None
+    finally:
+        conn.close()
+
+
+def delete_admin_session(token: str) -> bool:
+    if not token:
+        return False
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM admin_tokens WHERE token = ?", (token.strip(),))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
