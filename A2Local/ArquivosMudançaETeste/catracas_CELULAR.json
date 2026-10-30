@@ -1,0 +1,8 @@
+[
+  {
+    "turnstile_id": "catraca-01",
+    "source_id": "camera-01",
+    "passage_timeout": 15,
+    "max_pending_age": 2
+  }
+]

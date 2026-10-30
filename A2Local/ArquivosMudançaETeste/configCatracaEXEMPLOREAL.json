@@ -1,0 +1,70 @@
+{
+  "monitor": {
+    "bind_host": "0.0.0.0",
+    "hostname": "192.168.10.10",
+    "port": 8000,
+    "path": "api/notifications"
+  },
+
+  "devices": [
+    {
+      "turnstile_id": "catraca-01",
+      "model": "controlid_idblock",
+      "protocol": "http",
+      "host": "192.168.10.101",
+      "port": 80,
+      "username": "admin",
+      "password": "SENHA_DA_CATRACA_01",
+      "direction": "both",
+      "request_timeout": 5
+    },
+
+    {
+      "turnstile_id": "catraca-02",
+      "model": "controlid_idblock",
+      "protocol": "http",
+      "host": "192.168.10.102",
+      "port": 80,
+      "username": "admin",
+      "password": "SENHA_DA_CATRACA_02",
+      "direction": "both",
+      "request_timeout": 5
+    },
+
+    {
+      "turnstile_id": "catraca-03",
+      "model": "controlid_idblock",
+      "protocol": "http",
+      "host": "192.168.10.103",
+      "port": 80,
+      "username": "admin",
+      "password": "SENHA_DA_CATRACA_03",
+      "direction": "both",
+      "request_timeout": 5
+    },
+
+    {
+      "turnstile_id": "catraca-04",
+      "model": "controlid_idblock",
+      "protocol": "http",
+      "host": "192.168.10.104",
+      "port": 80,
+      "username": "admin",
+      "password": "SENHA_DA_CATRACA_04",
+      "direction": "both",
+      "request_timeout": 5
+    },
+
+    {
+      "turnstile_id": "catraca-05",
+      "model": "controlid_idblock",
+      "protocol": "http",
+      "host": "192.168.10.105",
+      "port": 80,
+      "username": "admin",
+      "password": "SENHA_DA_CATRACA_05",
+      "direction": "both",
+      "request_timeout": 5
+    }
+  ]
+}

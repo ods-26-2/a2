@@ -3,6 +3,7 @@ import time
 
 import requests
 
+
 class SimulatedTurnstile:
     def __init__(
         self,
@@ -38,33 +39,53 @@ class SimulatedTurnstile:
         self,
         monitor_config
     ):
-        print(f"[{self.turnstile_id}] Catraca simulada inicializada.")
+        print(
+            f"[{self.turnstile_id}] "
+            "Catraca simulada inicializada."
+        )
 
     def release(self):
-        print(f"[{self.turnstile_id}] CATRACA LIBERADA.")
+        print(
+            f"[{self.turnstile_id}] "
+            "CATRACA LIBERADA."
+        )
 
     def wait_for_passage(self):
         if self.pass_after is None:
-            time.sleep(self.passage_timeout)
+            time.sleep(
+                self.passage_timeout
+            )
+
             return {
                 "status": "timeout",
                 "direction": None
             }
 
-        pass_after = float(self.pass_after)
+        pass_after = float(
+            self.pass_after
+        )
 
-        if pass_after > self.passage_timeout:
-            time.sleep(self.passage_timeout)
+        if (
+            pass_after
+            > self.passage_timeout
+        ):
+            time.sleep(
+                self.passage_timeout
+            )
+
             return {
                 "status": "timeout",
                 "direction": None
             }
 
-        time.sleep(pass_after)
+        time.sleep(
+            pass_after
+        )
 
         return {
             "status": "passed",
-            "direction": self.simulated_direction
+            "direction":
+                self.simulated_direction
         }
 
 
@@ -76,13 +97,23 @@ class VisualSimulatedTurnstile:
         simulator_host="127.0.0.1",
         simulator_port=8765
     ):
-        self.turnstile_id = config["turnstile_id"]
-        self.passage_timeout = passage_timeout
-        self.simulator_base_url = (
-            f"http://{simulator_host}:{simulator_port}"
+        self.turnstile_id = config[
+            "turnstile_id"
+        ]
+
+        self.passage_timeout = (
+            passage_timeout
         )
 
-        simulation = config.get("simulation", {})
+        self.simulator_base_url = (
+            f"http://{simulator_host}:"
+            f"{simulator_port}"
+        )
+
+        simulation = config.get(
+            "simulation",
+            {}
+        )
 
         self.gateway = simulation.get(
             "gateway",
@@ -95,13 +126,16 @@ class VisualSimulatedTurnstile:
         ):
             raise RuntimeError(
                 f"[{self.turnstile_id}] "
-                f"Gateway inválido para simulação visual: "
+                "Gateway inválido para "
+                "simulação visual: "
                 f"{self.gateway}"
             )
 
-        self.release_direction = simulation.get(
-            "release_direction",
-            "both"
+        self.release_direction = (
+            simulation.get(
+                "release_direction",
+                "both"
+            )
         )
 
         if self.release_direction not in (
@@ -111,7 +145,8 @@ class VisualSimulatedTurnstile:
         ):
             raise RuntimeError(
                 f"[{self.turnstile_id}] "
-                f"Direção de liberação inválida para simulação visual: "
+                "Direção de liberação "
+                "inválida: "
                 f"{self.release_direction}"
             )
 
@@ -128,8 +163,12 @@ class VisualSimulatedTurnstile:
         )
 
         self.last_direction = None
-        self.passage_event = threading.Event()
-        self.give_up_event = threading.Event()
+        self.passage_event = (
+            threading.Event()
+        )
+        self.give_up_event = (
+            threading.Event()
+        )
 
     def post_to_simulator(
         self,
@@ -137,10 +176,12 @@ class VisualSimulatedTurnstile:
         payload
     ):
         response = requests.post(
-            f"{self.simulator_base_url}{endpoint}",
+            f"{self.simulator_base_url}"
+            f"{endpoint}",
             json=payload,
             timeout=self.request_timeout
         )
+
         response.raise_for_status()
         return response
 
@@ -163,23 +204,34 @@ class VisualSimulatedTurnstile:
         ).strip("/")
 
         callback_url = (
-            f"http://127.0.0.1:{callback_port}/"
+            f"http://127.0.0.1:"
+            f"{callback_port}/"
             f"{callback_path}/catra_event"
         )
 
         self.post_to_simulator(
             "/register",
             {
-                "turnstile_id": self.turnstile_id,
-                "device_id": str(self.device_id),
-                "gateway": self.gateway,
-                "callback_url": callback_url
+                "turnstile_id":
+                    self.turnstile_id,
+
+                "device_id":
+                    str(
+                        self.device_id
+                    ),
+
+                "gateway":
+                    self.gateway,
+
+                "callback_url":
+                    callback_url
             }
         )
 
         print(
             f"[{self.turnstile_id}] "
-            f"Simulador visual registrado com device_id={self.device_id}."
+            "Simulador visual registrado "
+            f"com device_id={self.device_id}."
         )
 
     def release(self):
@@ -190,13 +242,22 @@ class VisualSimulatedTurnstile:
         self.post_to_simulator(
             "/release",
             {
-                "turnstile_id": self.turnstile_id,
-                "allow": self.release_direction,
-                "passage_timeout": self.passage_timeout
+                "turnstile_id":
+                    self.turnstile_id,
+
+                "allow":
+                    self.release_direction,
+
+                "passage_timeout":
+                    self.passage_timeout
             }
         )
 
-        print(f"[{self.turnstile_id}] Liberação enviada ao simulador visual.")
+        print(
+            f"[{self.turnstile_id}] "
+            "Liberação enviada ao "
+            "simulador visual."
+        )
 
     def get_passage_direction(
         self,
@@ -209,13 +270,19 @@ class VisualSimulatedTurnstile:
             .replace(" ", "_")
         )
 
-        if normalized.startswith("EVENT_"):
-            normalized = normalized[len("EVENT_"):]
+        if normalized.startswith(
+            "EVENT_"
+        ):
+            normalized = normalized[
+                len("EVENT_"):
+            ]
 
         if normalized == "TURN_RIGHT":
             rotation = "clockwise"
         elif normalized == "TURN_LEFT":
-            rotation = "anticlockwise"
+            rotation = (
+                "anticlockwise"
+            )
         else:
             return None
 
@@ -235,26 +302,380 @@ class VisualSimulatedTurnstile:
             .replace(" ", "_")
         )
 
-        if normalized.startswith("EVENT_"):
-            normalized = normalized[len("EVENT_"):]
+        if normalized.startswith(
+            "EVENT_"
+        ):
+            normalized = normalized[
+                len("EVENT_"):
+            ]
 
-        if normalized in ("TURN_LEFT", "TURN_RIGHT"):
-            self.last_direction = self.get_passage_direction(normalized)
+        if normalized in (
+            "TURN_LEFT",
+            "TURN_RIGHT"
+        ):
+            self.last_direction = (
+                self.get_passage_direction(
+                    normalized
+                )
+            )
+
             self.passage_event.set()
+
         elif normalized == "GIVE_UP":
             self.give_up_event.set()
 
     def wait_for_passage(self):
-        deadline = time.monotonic() + self.passage_timeout
+        deadline = (
+            time.monotonic()
+            + self.passage_timeout
+        )
 
-        while time.monotonic() < deadline:
-            if self.passage_event.wait(timeout=0.05):
+        while (
+            time.monotonic()
+            < deadline
+        ):
+            if self.passage_event.wait(
+                timeout=0.05
+            ):
                 return {
                     "status": "passed",
-                    "direction": self.last_direction
+                    "direction":
+                        self.last_direction
                 }
 
-            if self.give_up_event.is_set():
+            if (
+                self.give_up_event
+                .is_set()
+            ):
+                return {
+                    "status": "give_up",
+                    "direction": None
+                }
+
+        return {
+            "status": "timeout",
+            "direction": None
+        }
+
+
+class MobileTurnstile:
+    """
+    Catraca simulada por um celular.
+
+    O celular executa catraca_celular.py e funciona como
+    um pequeno dispositivo HTTP.
+
+    Fluxo:
+        A2 -> POST /configure -> celular
+        A2 -> POST /release   -> celular
+
+        usuário toca Entrada/Saída no celular
+
+        celular -> POST monitor HTTP do A2
+                -> TURN_RIGHT / TURN_LEFT
+
+        A2 recebe o evento e conclui wait_for_passage().
+    """
+
+    def __init__(
+        self,
+        config,
+        passage_timeout
+    ):
+        self.turnstile_id = (
+            config[
+                "turnstile_id"
+            ]
+        )
+
+        self.protocol = config.get(
+            "protocol",
+            "http"
+        )
+
+        self.host = config["host"]
+
+        self.port = int(
+            config.get(
+                "port",
+                8080
+            )
+        )
+
+        self.request_timeout = float(
+            config.get(
+                "request_timeout",
+                5
+            )
+        )
+
+        self.passage_timeout = (
+            passage_timeout
+        )
+
+        self.device_id = str(
+            config.get(
+                "device_id",
+                f"mobile-{self.turnstile_id}"
+            )
+        )
+
+        self.gateway = config.get(
+            "gateway",
+            "clockwise"
+        )
+
+        if self.gateway not in (
+            "clockwise",
+            "anticlockwise"
+        ):
+            raise RuntimeError(
+                f"[{self.turnstile_id}] "
+                "gateway inválido: "
+                f"{self.gateway}"
+            )
+
+        self.release_direction = (
+            config.get(
+                "direction",
+                "both"
+            )
+        )
+
+        if self.release_direction not in (
+            "clockwise",
+            "anticlockwise",
+            "both"
+        ):
+            raise RuntimeError(
+                f"[{self.turnstile_id}] "
+                "direction inválida: "
+                f"{self.release_direction}"
+            )
+
+        self.http = (
+            requests.Session()
+        )
+
+        self.last_direction = None
+        self.passage_event = (
+            threading.Event()
+        )
+        self.give_up_event = (
+            threading.Event()
+        )
+
+    @property
+    def base_url(self):
+        return (
+            f"{self.protocol}://"
+            f"{self.host}:"
+            f"{self.port}"
+        )
+
+    def request(
+        self,
+        endpoint,
+        json_data=None
+    ):
+        response = self.http.post(
+            f"{self.base_url}"
+            f"{endpoint}",
+            json=json_data,
+            timeout=self.request_timeout
+        )
+
+        response.raise_for_status()
+        return response
+
+    def initialize(
+        self,
+        monitor_config
+    ):
+        """
+        Diz ao celular onde ele deve devolver os eventos
+        de passagem.
+
+        monitor.hostname precisa ser o IP da máquina
+        executando o A2, acessível pelo celular.
+        """
+
+        callback_host = (
+            monitor_config.get(
+                "hostname"
+            )
+        )
+
+        if not callback_host:
+            raise RuntimeError(
+                f"[{self.turnstile_id}] "
+                "monitor.hostname não configurado. "
+                "Use o IP da máquina/Jetson que "
+                "executa o A2."
+            )
+
+        callback_port = int(
+            monitor_config.get(
+                "port",
+                8000
+            )
+        )
+
+        callback_path = str(
+            monitor_config.get(
+                "path",
+                "api/notifications"
+            )
+        ).strip("/")
+
+        callback_url = (
+            f"http://{callback_host}:"
+            f"{callback_port}/"
+            f"{callback_path}/catra_event"
+        )
+
+        self.request(
+            "/configure",
+            {
+                "turnstile_id":
+                    self.turnstile_id,
+
+                "device_id":
+                    self.device_id,
+
+                "gateway":
+                    self.gateway,
+
+                "callback_url":
+                    callback_url
+            }
+        )
+
+        print(
+            f"[{self.turnstile_id}] "
+            "Celular conectado."
+        )
+
+        print(
+            f"[{self.turnstile_id}] "
+            f"Dispositivo: {self.base_url}"
+        )
+
+        print(
+            f"[{self.turnstile_id}] "
+            f"Callback: {callback_url}"
+        )
+
+    def release(self):
+        self.passage_event.clear()
+        self.give_up_event.clear()
+        self.last_direction = None
+
+        self.request(
+            "/release",
+            {
+                "allow":
+                    self.release_direction,
+
+                "passage_timeout":
+                    self.passage_timeout
+            }
+        )
+
+        print(
+            f"[{self.turnstile_id}] "
+            "Comando de liberação "
+            "enviado ao celular."
+        )
+
+    def get_passage_direction(
+        self,
+        event_name
+    ):
+        normalized = (
+            str(event_name)
+            .strip()
+            .upper()
+            .replace(" ", "_")
+        )
+
+        if normalized.startswith(
+            "EVENT_"
+        ):
+            normalized = normalized[
+                len("EVENT_"):
+            ]
+
+        if normalized == "TURN_RIGHT":
+            rotation = "clockwise"
+        elif normalized == "TURN_LEFT":
+            rotation = (
+                "anticlockwise"
+            )
+        else:
+            return None
+
+        if rotation == self.gateway:
+            return "entrada"
+
+        return "saida"
+
+    def notify_event(
+        self,
+        event_name
+    ):
+        normalized = (
+            str(event_name)
+            .strip()
+            .upper()
+            .replace(" ", "_")
+        )
+
+        if normalized.startswith(
+            "EVENT_"
+        ):
+            normalized = normalized[
+                len("EVENT_"):
+            ]
+
+        if normalized in (
+            "TURN_LEFT",
+            "TURN_RIGHT"
+        ):
+            self.last_direction = (
+                self.get_passage_direction(
+                    normalized
+                )
+            )
+
+            self.passage_event.set()
+
+        elif normalized == "GIVE_UP":
+            self.give_up_event.set()
+
+    def wait_for_passage(self):
+        deadline = (
+            time.monotonic()
+            + self.passage_timeout
+        )
+
+        while (
+            time.monotonic()
+            < deadline
+        ):
+            if self.passage_event.wait(
+                timeout=0.05
+            ):
+                return {
+                    "status": "passed",
+                    "direction":
+                        self.last_direction
+                }
+
+            if (
+                self.give_up_event
+                .is_set()
+            ):
                 return {
                     "status": "give_up",
                     "direction": None
@@ -272,16 +693,39 @@ class ControlIDBlock:
         config,
         passage_timeout
     ):
-        self.turnstile_id = config["turnstile_id"]
-        self.protocol = config.get("protocol", "http")
-        self.host = config["host"]
-        self.port = int(config.get("port", 80))
-        self.username = config.get("username", "admin")
-        self.password = config.get("password", "admin")
+        self.turnstile_id = config[
+            "turnstile_id"
+        ]
 
-        self.release_direction = config.get(
-            "direction",
-            "both"
+        self.protocol = config.get(
+            "protocol",
+            "http"
+        )
+
+        self.host = config["host"]
+
+        self.port = int(
+            config.get(
+                "port",
+                80
+            )
+        )
+
+        self.username = config.get(
+            "username",
+            "admin"
+        )
+
+        self.password = config.get(
+            "password",
+            "admin"
+        )
+
+        self.release_direction = (
+            config.get(
+                "direction",
+                "both"
+            )
         )
 
         if self.release_direction not in (
@@ -291,23 +735,49 @@ class ControlIDBlock:
         ):
             raise RuntimeError(
                 f"[{self.turnstile_id}] "
-                f"Direção de liberação inválida: {self.release_direction}"
+                "Direção de liberação inválida: "
+                f"{self.release_direction}"
             )
 
-        self.verify_tls = bool(config.get("verify_tls", False))
-        self.request_timeout = float(config.get("request_timeout", 5))
-        self.passage_timeout = passage_timeout
+        self.verify_tls = bool(
+            config.get(
+                "verify_tls",
+                False
+            )
+        )
+
+        self.request_timeout = float(
+            config.get(
+                "request_timeout",
+                5
+            )
+        )
+
+        self.passage_timeout = (
+            passage_timeout
+        )
+
         self.http = requests.Session()
         self.session_token = None
         self.device_id = None
         self.gateway = None
         self.last_direction = None
-        self.passage_event = threading.Event()
-        self.give_up_event = threading.Event()
+
+        self.passage_event = (
+            threading.Event()
+        )
+
+        self.give_up_event = (
+            threading.Event()
+        )
 
     @property
     def base_url(self):
-        return f"{self.protocol}://{self.host}:{self.port}"
+        return (
+            f"{self.protocol}://"
+            f"{self.host}:"
+            f"{self.port}"
+        )
 
     def request(
         self,
@@ -317,16 +787,23 @@ class ControlIDBlock:
     ):
         params = {}
 
-        if use_session and self.session_token:
-            params["session"] = self.session_token
+        if (
+            use_session
+            and self.session_token
+        ):
+            params[
+                "session"
+            ] = self.session_token
 
         response = self.http.post(
-            f"{self.base_url}{endpoint}",
+            f"{self.base_url}"
+            f"{endpoint}",
             params=params,
             json=json_data,
             timeout=self.request_timeout,
             verify=self.verify_tls
         )
+
         response.raise_for_status()
         return response
 
@@ -334,25 +811,48 @@ class ControlIDBlock:
         response = self.request(
             "/login.fcgi",
             {
-                "login": self.username,
-                "password": self.password
+                "login":
+                    self.username,
+
+                "password":
+                    self.password
             },
             use_session=False
         )
 
         data = response.json()
-        self.session_token = data.get("session")
+
+        self.session_token = (
+            data.get(
+                "session"
+            )
+        )
 
         if not self.session_token:
-            raise RuntimeError(f"[{self.turnstile_id}] Falha no login da catraca.")
+            raise RuntimeError(
+                f"[{self.turnstile_id}] "
+                "Falha no login da catraca."
+            )
 
-    def get_system_information(self):
-        response = self.request("/system_information.fcgi", {})
+    def get_system_information(
+        self
+    ):
+        response = self.request(
+            "/system_information.fcgi",
+            {}
+        )
+
         data = response.json()
-        self.device_id = data.get("device_id")
+
+        self.device_id = data.get(
+            "device_id"
+        )
 
         if self.device_id is None:
-            raise RuntimeError(f"[{self.turnstile_id}] device_id não retornado.")
+            raise RuntimeError(
+                f"[{self.turnstile_id}] "
+                "device_id não retornado."
+            )
 
         return data
 
@@ -367,27 +867,47 @@ class ControlIDBlock:
         )
 
         data = response.json()
-        catra = data.get("catra", {})
-        self.gateway = catra.get("gateway")
 
-        if self.gateway not in ("clockwise", "anticlockwise"):
+        catra = data.get(
+            "catra",
+            {}
+        )
+
+        self.gateway = catra.get(
+            "gateway"
+        )
+
+        if self.gateway not in (
+            "clockwise",
+            "anticlockwise"
+        ):
             raise RuntimeError(
-                f"[{self.turnstile_id}] Gateway inválido ou não retornado: {self.gateway}"
+                f"[{self.turnstile_id}] "
+                "Gateway inválido ou "
+                "não retornado: "
+                f"{self.gateway}"
             )
 
         print(
             f"[{self.turnstile_id}] "
-            f"Sentido configurado como entrada: {self.gateway}"
+            "Sentido configurado como "
+            f"entrada: {self.gateway}"
         )
 
     def configure_timeout(self):
-        timeout_ms = int(self.passage_timeout * 1000)
+        timeout_ms = int(
+            self.passage_timeout
+            * 1000
+        )
 
         self.request(
             "/set_configuration.fcgi",
             {
                 "general": {
-                    "catra_timeout": str(timeout_ms)
+                    "catra_timeout":
+                        str(
+                            timeout_ms
+                        )
                 }
             }
         )
@@ -396,25 +916,51 @@ class ControlIDBlock:
         self,
         monitor_config
     ):
-        hostname = monitor_config.get("hostname")
+        hostname = (
+            monitor_config.get(
+                "hostname"
+            )
+        )
 
         if not hostname:
             raise RuntimeError(
-                f"[{self.turnstile_id}] monitor.hostname não configurado."
+                f"[{self.turnstile_id}] "
+                "monitor.hostname "
+                "não configurado."
             )
 
-        port = int(monitor_config.get("port", 8000))
-        path = monitor_config.get("path", "api/notifications").strip("/")
+        port = int(
+            monitor_config.get(
+                "port",
+                8000
+            )
+        )
+
+        path = monitor_config.get(
+            "path",
+            "api/notifications"
+        ).strip("/")
 
         self.request(
             "/set_configuration.fcgi",
             {
                 "monitor": {
-                    "request_timeout": "5000",
-                    "hostname": hostname,
-                    "port": str(port),
-                    "path": path,
-                    "inform_access_event_id": "1"
+                    "request_timeout":
+                        "5000",
+
+                    "hostname":
+                        hostname,
+
+                    "port":
+                        str(
+                            port
+                        ),
+
+                    "path":
+                        path,
+
+                    "inform_access_event_id":
+                        "1"
                 }
             }
         )
@@ -424,18 +970,37 @@ class ControlIDBlock:
         monitor_config
     ):
         self.login()
-        info = self.get_system_information()
+
+        info = (
+            self.get_system_information()
+        )
+
         self.get_gateway()
         self.configure_timeout()
-        self.configure_monitor(monitor_config)
 
-        print(f"[{self.turnstile_id}] Control iD conectada.")
-        print(f"[{self.turnstile_id}] device_id = {self.device_id}")
+        self.configure_monitor(
+            monitor_config
+        )
 
-        version = info.get("version")
+        print(
+            f"[{self.turnstile_id}] "
+            "Control iD conectada."
+        )
+
+        print(
+            f"[{self.turnstile_id}] "
+            f"device_id = {self.device_id}"
+        )
+
+        version = info.get(
+            "version"
+        )
 
         if version is not None:
-            print(f"[{self.turnstile_id}] firmware = {version}")
+            print(
+                f"[{self.turnstile_id}] "
+                f"firmware = {version}"
+            )
 
     def release(self):
         self.passage_event.clear()
@@ -447,14 +1012,21 @@ class ControlIDBlock:
             {
                 "actions": [
                     {
-                        "action": "catra",
-                        "parameters": f"allow={self.release_direction}"
+                        "action":
+                            "catra",
+
+                        "parameters":
+                            "allow="
+                            f"{self.release_direction}"
                     }
                 ]
             }
         )
 
-        print(f"[{self.turnstile_id}] Comando de liberação enviado.")
+        print(
+            f"[{self.turnstile_id}] "
+            "Comando de liberação enviado."
+        )
 
     def get_passage_direction(
         self,
@@ -467,13 +1039,21 @@ class ControlIDBlock:
             .replace(" ", "_")
         )
 
-        if normalized.startswith("EVENT_"):
-            normalized = normalized[len("EVENT_"):]
+        if normalized.startswith(
+            "EVENT_"
+        ):
+            normalized = normalized[
+                len("EVENT_"):
+            ]
 
         if normalized == "TURN_RIGHT":
             rotation = "clockwise"
+
         elif normalized == "TURN_LEFT":
-            rotation = "anticlockwise"
+            rotation = (
+                "anticlockwise"
+            )
+
         else:
             return None
 
@@ -493,34 +1073,67 @@ class ControlIDBlock:
             .replace(" ", "_")
         )
 
-        if normalized.startswith("EVENT_"):
-            normalized = normalized[len("EVENT_"):]
+        if normalized.startswith(
+            "EVENT_"
+        ):
+            normalized = normalized[
+                len("EVENT_"):
+            ]
 
-        if normalized in ("TURN_LEFT", "TURN_RIGHT"):
-            self.last_direction = self.get_passage_direction(normalized)
+        if normalized in (
+            "TURN_LEFT",
+            "TURN_RIGHT"
+        ):
+            self.last_direction = (
+                self.get_passage_direction(
+                    normalized
+                )
+            )
+
             self.passage_event.set()
+
         elif normalized == "GIVE_UP":
             self.give_up_event.set()
 
     def wait_for_passage(self):
-        deadline = time.monotonic() + self.passage_timeout
+        deadline = (
+            time.monotonic()
+            + self.passage_timeout
+        )
 
-        while time.monotonic() < deadline:
-            if self.passage_event.wait(timeout=0.05):
+        while (
+            time.monotonic()
+            < deadline
+        ):
+            if self.passage_event.wait(
+                timeout=0.05
+            ):
                 return {
-                    "status": "passed",
-                    "direction": self.last_direction
+                    "status":
+                        "passed",
+
+                    "direction":
+                        self.last_direction
                 }
 
-            if self.give_up_event.is_set():
+            if (
+                self.give_up_event
+                .is_set()
+            ):
                 return {
-                    "status": "give_up",
-                    "direction": None
+                    "status":
+                        "give_up",
+
+                    "direction":
+                        None
                 }
 
         return {
-            "status": "timeout",
-            "direction": None
+            "status":
+                "timeout",
+
+            "direction":
+                None
         }
 
 
@@ -531,16 +1144,34 @@ def create_turnstile_driver(
     simulator_host="127.0.0.1",
     simulator_port=8765
 ):
-    model = str(hardware_config.get("model", "")).lower()
-    protocol = str(hardware_config.get("protocol", "")).lower()
+    model = str(
+        hardware_config.get(
+            "model",
+            ""
+        )
+    ).lower()
 
-    if model == "simulated" or protocol == "simulation":
+    protocol = str(
+        hardware_config.get(
+            "protocol",
+            ""
+        )
+    ).lower()
+
+    if (
+        model == "simulated"
+        or protocol == "simulation"
+    ):
         if simulation_mode:
-            return VisualSimulatedTurnstile(
-                hardware_config,
-                passage_timeout,
-                simulator_host=simulator_host,
-                simulator_port=simulator_port
+            return (
+                VisualSimulatedTurnstile(
+                    hardware_config,
+                    passage_timeout,
+                    simulator_host=
+                        simulator_host,
+                    simulator_port=
+                        simulator_port
+                )
             )
 
         return SimulatedTurnstile(
@@ -548,12 +1179,32 @@ def create_turnstile_driver(
             passage_timeout
         )
 
-    if model == "controlid_idblock" and protocol in ("http", "https"):
+    if (
+        model == "mobile"
+        and protocol in (
+            "http",
+            "https"
+        )
+    ):
+        return MobileTurnstile(
+            hardware_config,
+            passage_timeout
+        )
+
+    if (
+        model == "controlid_idblock"
+        and protocol in (
+            "http",
+            "https"
+        )
+    ):
         return ControlIDBlock(
             hardware_config,
             passage_timeout
         )
 
     raise RuntimeError(
-        f"Modelo/protocolo de catraca não suportado: {model}/{protocol}"
+        "Modelo/protocolo de catraca "
+        "não suportado: "
+        f"{model}/{protocol}"
     )

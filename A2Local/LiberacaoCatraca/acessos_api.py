@@ -1,65 +1,115 @@
+import os
 import sqlite3
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import (
+    datetime,
+    timezone
+)
 from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query
+)
 
-DATABASE_FILE = Path(__file__).with_name("acessos.db")
+from database import (
+    ensure_access_logs_schema
+)
 
-RETENTION_DAYS = 30
-RETENTION_SECONDS = RETENTION_DAYS * 24 * 60 * 60
-CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
+
+DATABASE_FILE = Path(
+    os.getenv(
+        "A2_DATABASE_FILE",
+        str(
+            Path(__file__)
+            .with_name(
+                "acessos.db"
+            )
+        )
+    )
+)
+
+RETENTION_DAYS = int(
+    os.getenv(
+        "A2_LOG_RETENTION_DAYS",
+        "30"
+    )
+)
+
+RETENTION_SECONDS = (
+    RETENTION_DAYS
+    * 24
+    * 60
+    * 60
+)
+
+CLEANUP_INTERVAL_SECONDS = int(
+    os.getenv(
+        "A2_LOG_CLEANUP_INTERVAL_SECONDS",
+        str(
+            6 * 60 * 60
+        )
+    )
+)
+
+API_HOST = os.getenv(
+    "A2_LOG_API_HOST",
+    "0.0.0.0"
+)
+
+API_PORT = int(
+    os.getenv(
+        "A2_LOG_API_PORT",
+        "8001"
+    )
+)
+
 
 def get_connection():
+    DATABASE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
     connection = sqlite3.connect(
         DATABASE_FILE,
         timeout=10
     )
 
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA busy_timeout = 10000")
-    connection.execute("PRAGMA journal_mode = WAL")
+    connection.row_factory = (
+        sqlite3.Row
+    )
+
+    connection.execute(
+        "PRAGMA busy_timeout = 10000"
+    )
+
+    connection.execute(
+        "PRAGMA journal_mode = WAL"
+    )
 
     return connection
 
+
 def ensure_database():
     with get_connection() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS access_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cpf TEXT NOT NULL,
-                direction TEXT NOT NULL,
-                occurred_at INTEGER NOT NULL,
-                camera_id TEXT NOT NULL,
-                turnstile_id TEXT NOT NULL
-            )
-            """
+        ensure_access_logs_schema(
+            connection
         )
 
-        connection.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_access_logs_cpf
-            ON access_logs(cpf)
-            """
-        )
-
-        connection.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_access_logs_occurred_at
-            ON access_logs(occurred_at)
-            """
-        )
-
-        connection.commit()
 
 def cleanup_old_logs():
-    cutoff = int(time.time()) - RETENTION_SECONDS
+    cutoff = (
+        int(
+            time.time()
+        )
+        - RETENTION_SECONDS
+    )
 
     with get_connection() as connection:
         cursor = connection.execute(
@@ -67,45 +117,58 @@ def cleanup_old_logs():
             DELETE FROM access_logs
             WHERE occurred_at < ?
             """,
-            (cutoff,)
+            (
+                cutoff,
+            )
         )
 
-        deleted = cursor.rowcount
+        deleted = (
+            cursor.rowcount
+        )
+
         connection.commit()
 
     if deleted > 0:
         print(
-            f"Limpeza automática: "
-            f"{deleted} registro(s) com mais de "
-            f"{RETENTION_DAYS} dias removido(s)."
+            "Limpeza automática: "
+            f"{deleted} registro(s) "
+            f"com mais de "
+            f"{RETENTION_DAYS} dias "
+            "removido(s)."
         )
 
     return deleted
 
-def parse_time_filter(value):
+
+def parse_time_filter(
+    value
+):
     if value is None:
         return None
 
     value = value.strip()
 
     try:
-        return int(value)
-
+        return int(
+            value
+        )
     except ValueError:
         pass
 
     try:
         parsed = datetime.fromisoformat(
-            value.replace("Z", "+00:00")
+            value.replace(
+                "Z",
+                "+00:00"
+            )
         )
-
     except ValueError:
         raise HTTPException(
             status_code=400,
             detail=(
-                "Data inválida. Use timestamp Unix ou "
-                "ISO 8601, por exemplo "
-                "2026-09-29T15:00:00-03:00."
+                "Data inválida. "
+                "Use timestamp Unix "
+                "ou ISO 8601."
             )
         )
 
@@ -114,11 +177,18 @@ def parse_time_filter(value):
             tzinfo=timezone.utc
         )
 
-    return int(parsed.timestamp())
+    return int(
+        parsed.timestamp()
+    )
 
-def serialize_log(row):
+
+def serialize_log(
+    row
+):
     occurred_at = int(
-        row["occurred_at"]
+        row[
+            "occurred_at"
+        ]
     )
 
     occurred_at_iso = (
@@ -135,21 +205,105 @@ def serialize_log(row):
     )
 
     return {
-        "id": row["id"],
-        "cpf": row["cpf"],
-        "direction": row["direction"],
-        "occurred_at": occurred_at,
-        "occurred_at_iso": occurred_at_iso,
-        "camera_id": row["camera_id"],
-        "turnstile_id": row["turnstile_id"]
+        "id":
+            row["id"],
+
+        "cpf":
+            row["cpf"],
+
+        "direction":
+            row["direction"],
+
+        "occurred_at":
+            occurred_at,
+
+        "occurred_at_iso":
+            occurred_at_iso,
+
+        "source_id":
+            row["source_id"],
+
+        "turnstile_id":
+            row["turnstile_id"],
+
+        "i6_message_id":
+            row["i6_message_id"],
+
+        "frame_index":
+            row["frame_index"],
+
+        "captured_at":
+            row["captured_at"],
+
+        "evidence": {
+            "status":
+                row[
+                    "media_status"
+                ],
+
+            "request_id":
+                row[
+                    "media_request_id"
+                ],
+
+            "clip_id":
+                row[
+                    "media_clip_id"
+                ],
+
+            "media_type":
+                row[
+                    "media_type"
+                ],
+
+            "media_uri":
+                row[
+                    "media_uri"
+                ],
+
+            "hash_sha256":
+                row[
+                    "media_hash_sha256"
+                ],
+
+            "expires_at":
+                row[
+                    "media_expires_at"
+                ]
+        }
     }
 
+
+SELECT_COLUMNS = """
+    id,
+    cpf,
+    direction,
+    occurred_at,
+    source_id,
+    turnstile_id,
+    i6_message_id,
+    frame_index,
+    captured_at,
+    media_request_id,
+    media_clip_id,
+    media_type,
+    media_uri,
+    media_hash_sha256,
+    media_expires_at,
+    media_status
+"""
+
+
 @asynccontextmanager
-async def lifespan(app):
+async def lifespan(
+    app
+):
     ensure_database()
     cleanup_old_logs()
 
-    stop_event = threading.Event()
+    stop_event = (
+        threading.Event()
+    )
 
     def cleanup_worker():
         while not stop_event.wait(
@@ -158,14 +312,17 @@ async def lifespan(app):
             try:
                 cleanup_old_logs()
 
-            except Exception as e:
+            except Exception as error:
                 print(
-                    f"Erro na limpeza automática: {e}"
+                    "Erro na limpeza "
+                    f"automática: {error}"
                 )
 
-    cleanup_thread = threading.Thread(
-        target=cleanup_worker,
-        daemon=True
+    cleanup_thread = (
+        threading.Thread(
+            target=cleanup_worker,
+            daemon=True
+        )
     )
 
     cleanup_thread.start()
@@ -175,30 +332,46 @@ async def lifespan(app):
 
     finally:
         stop_event.set()
+
         cleanup_thread.join(
             timeout=1
         )
 
+
 app = FastAPI(
-    title="API de Acessos",
-    version="1.0",
+    title="API Local de Acessos",
+    version="1.3",
     lifespan=lifespan
 )
 
-@app.get("/health")
+
+@app.get(
+    "/health"
+)
 def health():
     return {
-        "status": "ok",
-        "database": str(DATABASE_FILE),
-        "retention_days": RETENTION_DAYS
+        "status":
+            "ok",
+
+        "database":
+            str(
+                DATABASE_FILE
+            ),
+
+        "retention_days":
+            RETENTION_DAYS
     }
 
-@app.get("/acessos")
+
+@app.get(
+    "/acessos"
+)
 def get_access_logs(
     cpf: Optional[str] = None,
     direction: Optional[str] = None,
-    camera_id: Optional[str] = None,
+    source_id: Optional[str] = None,
     turnstile_id: Optional[str] = None,
+    media_status: Optional[str] = None,
     inicio: Optional[str] = None,
     fim: Optional[str] = None,
     limit: int = Query(
@@ -218,7 +391,6 @@ def get_access_logs(
         conditions.append(
             "cpf = ?"
         )
-
         parameters.append(
             cpf
         )
@@ -245,42 +417,71 @@ def get_access_logs(
         conditions.append(
             "direction = ?"
         )
-
         parameters.append(
             direction
         )
 
-    if camera_id is not None:
+    if source_id is not None:
         conditions.append(
-            "camera_id = ?"
+            "source_id = ?"
         )
-
         parameters.append(
-            camera_id
+            source_id
         )
 
     if turnstile_id is not None:
         conditions.append(
             "turnstile_id = ?"
         )
-
         parameters.append(
             turnstile_id
         )
 
-    inicio_timestamp = parse_time_filter(
-        inicio
+    if media_status is not None:
+        media_status = (
+            media_status
+            .strip()
+            .upper()
+        )
+
+        if media_status not in (
+            "NONE",
+            "PENDING",
+            "READY",
+            "ERROR"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "media_status deve ser "
+                    "NONE, PENDING, READY ou ERROR."
+                )
+            )
+
+        conditions.append(
+            "media_status = ?"
+        )
+
+        parameters.append(
+            media_status
+        )
+
+    inicio_timestamp = (
+        parse_time_filter(
+            inicio
+        )
     )
 
-    fim_timestamp = parse_time_filter(
-        fim
+    fim_timestamp = (
+        parse_time_filter(
+            fim
+        )
     )
 
     if inicio_timestamp is not None:
         conditions.append(
             "occurred_at >= ?"
         )
-
         parameters.append(
             inicio_timestamp
         )
@@ -289,20 +490,21 @@ def get_access_logs(
         conditions.append(
             "occurred_at <= ?"
         )
-
         parameters.append(
             fim_timestamp
         )
 
     if (
-        inicio_timestamp is not None
-        and fim_timestamp is not None
-        and inicio_timestamp > fim_timestamp
+        inicio_timestamp
+        is not None
+        and fim_timestamp
+        is not None
+        and inicio_timestamp
+        > fim_timestamp
     ):
         raise HTTPException(
             status_code=400,
             detail=(
-                "O período informado é inválido: "
                 "inicio é maior que fim."
             )
         )
@@ -325,20 +527,19 @@ def get_access_logs(
             {where}
             """,
             parameters
-        ).fetchone()["total"]
+        ).fetchone()[
+            "total"
+        ]
 
         rows = connection.execute(
             f"""
             SELECT
-                id,
-                cpf,
-                direction,
-                occurred_at,
-                camera_id,
-                turnstile_id
+                {SELECT_COLUMNS}
             FROM access_logs
             {where}
-            ORDER BY occurred_at DESC, id DESC
+            ORDER BY
+                occurred_at DESC,
+                id DESC
             LIMIT ? OFFSET ?
             """,
             parameters
@@ -349,53 +550,75 @@ def get_access_logs(
         ).fetchall()
 
     return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
+        "total":
+            total,
+
+        "limit":
+            limit,
+
+        "offset":
+            offset,
+
         "data": [
-            serialize_log(row)
-            for row in rows
+            serialize_log(
+                row
+            )
+            for row
+            in rows
         ]
     }
 
-@app.get("/acessos/{log_id}")
-def get_access_log(log_id: int):
+
+@app.get(
+    "/acessos/{log_id}"
+)
+def get_access_log(
+    log_id: int
+):
     with get_connection() as connection:
         row = connection.execute(
-            """
+            f"""
             SELECT
-                id,
-                cpf,
-                direction,
-                occurred_at,
-                camera_id,
-                turnstile_id
+                {SELECT_COLUMNS}
             FROM access_logs
             WHERE id = ?
             """,
-            (log_id,)
+            (
+                log_id,
+            )
         ).fetchone()
 
     if row is None:
         raise HTTPException(
             status_code=404,
-            detail="Registro não encontrado."
+            detail=(
+                "Registro não encontrado."
+            )
         )
 
-    return serialize_log(row)
+    return serialize_log(
+        row
+    )
 
-@app.post("/manutencao/limpar")
+
+@app.post(
+    "/manutencao/limpar"
+)
 def run_cleanup():
     deleted = cleanup_old_logs()
 
     return {
-        "deleted": deleted,
-        "retention_days": RETENTION_DAYS
+        "deleted":
+            deleted,
+
+        "retention_days":
+            RETENTION_DAYS
     }
+
 
 if __name__ == "__main__":
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8001
+        host=API_HOST,
+        port=API_PORT
     )
