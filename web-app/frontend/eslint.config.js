@@ -24,6 +24,7 @@ export default [
       'react-hooks': reactHooks,
     },
     rules: {
+      'react/jsx-uses-vars': 'error',
       ...reactHooks.configs.recommended.rules,
       'react/jsx-uses-react': 'off',
       'react/react-in-jsx-scope': 'off',
