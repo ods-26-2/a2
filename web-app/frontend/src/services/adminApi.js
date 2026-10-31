@@ -116,19 +116,33 @@ export async function deleteAdminUser(cpf) {
   return handleResponse(res);
 }
 
-export async function updateUserExpiration(cpf, expirationDate) {
-  const cleanCpf = String(cpf).replace(/\D/g, '');
-  const res = await fetch(`/api/admin/users/${cleanCpf}/expiration`, {
-    method: 'PUT',
+export async function fetchAdminConfig() {
+  const res = await fetch('/api/admin/config', {
     headers: getAuthHeaders(),
-    body: JSON.stringify({ expiration_date: expirationDate || null }),
   });
   return handleResponse(res);
 }
 
-export async function fetchAdminConfig() {
-  const res = await fetch('/api/admin/config', {
+export async function fetchApiKey() {
+  const res = await fetch('/api/admin/api-key', {
     headers: getAuthHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function regenerateApiKey() {
+  const res = await fetch('/api/admin/api-key/regenerate', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function toggleApiKey(active) {
+  const res = await fetch('/api/admin/api-key/toggle', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ active }),
   });
   return handleResponse(res);
 }

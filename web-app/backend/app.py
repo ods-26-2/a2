@@ -7,12 +7,13 @@ backend_dir = Path(__file__).resolve().parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
+from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException, Depends, Header
+from pydantic import BaseModel, field_validator, model_validator
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, Response, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse, HTMLResponse
 import config
 
 from services import payload
@@ -29,11 +30,28 @@ from db.connection import (
     create_admin_session,
     verify_admin_session,
     delete_admin_session,
-    update_user_expiration,
+    delete_admin_sessions,
     update_admin_password,
+    create_user_session,
+    verify_user_session,
+    delete_user_session,
+    init_db,
+    get_api_key,
+    create_or_regenerate_api_key,
+    set_api_key_active,
+    validate_api_key,
 )
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        init_db()
+    except Exception:
+        pass
+    yield
+
+
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,6 +91,12 @@ def require_admin_auth(
     return username
 
 
+def require_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> str:
+    if not x_api_key or not validate_api_key(x_api_key):
+        raise HTTPException(status_code=401, detail="Chave de API inválida ou inativa")
+    return x_api_key
+
+
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 dist_dir = frontend_dir / "dist"
 static_dir = dist_dir if dist_dir.exists() else frontend_dir
@@ -86,8 +110,8 @@ if static_dir.exists():
 
 
 class UserAuthRequest(BaseModel):
-    cpf: int
-    password: str
+    cpf: Optional[int] = None
+    password: Optional[str] = None
 
 
 @app.get("/")
@@ -107,21 +131,100 @@ def admin_page():
     return RedirectResponse(url="/app/")
 
 
-@app.post("/get-payloads")
-def get_payloads(data: UserAuthRequest):
+@app.post("/api/user/login")
+def user_login(data: UserAuthRequest, response: Response):
+    if data.cpf is None or not data.password:
+        raise HTTPException(status_code=400, detail="CPF e senha obrigatórios")
     ok, reason, user = validate_user_access(cpf=data.cpf, password=data.password)
     if not ok:
         raise HTTPException(status_code=401, detail=reason)
+    token = create_user_session(data.cpf)
+    response.set_cookie(
+        key="sessionid",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        path="/",
+        max_age=24 * 3600,
+    )
+    return {"status": "success", "cpf": data.cpf}
+
+
+@app.post("/api/user/logout")
+def user_logout(request: Request, response: Response):
+    token = request.cookies.get("sessionid")
+    if token:
+        delete_user_session(token)
+    response.delete_cookie("sessionid", path="/")
+    return {"status": "success"}
+
+
+@app.get("/api/user/me")
+def user_me(request: Request):
+    token = request.cookies.get("sessionid")
+    cpf = verify_user_session(token) if token else None
+    if not cpf:
+        raise HTTPException(status_code=401, detail="Sessão expirada ou inválida")
+    return {"cpf": cpf}
+
+
+@app.post("/get-payloads")
+def get_payloads(
+    request: Request,
+    response: Response,
+    data: Optional[UserAuthRequest] = None,
+):
+    cpf = None
+    if data and data.cpf is not None and data.password:
+        ok, reason, user = validate_user_access(cpf=data.cpf, password=data.password)
+        if not ok:
+            raise HTTPException(status_code=401, detail=reason)
+        cpf = data.cpf
+        token = create_user_session(cpf)
+        response.set_cookie(
+            key="sessionid",
+            value=token,
+            httponly=True,
+            samesite="lax",
+            path="/",
+            max_age=24 * 3600,
+        )
+    else:
+        token = request.cookies.get("sessionid")
+        cpf = verify_user_session(token) if token else None
+        if not cpf:
+            raise HTTPException(status_code=401, detail="Sessão expirada ou inválida")
     batch_size = get_payload_batch_size()
-    return payload.get_payloads(cpf=data.cpf, length=batch_size)
+    return payload.get_payloads(cpf=cpf, length=batch_size)
 
 
 @app.post("/get-payload")
-def get_payload(data: UserAuthRequest):
-    ok, reason, user = validate_user_access(cpf=data.cpf, password=data.password)
-    if not ok:
-        raise HTTPException(status_code=401, detail=reason)
-    return payload.get_payloads(cpf=data.cpf, length=1)
+def get_payload(
+    request: Request,
+    response: Response,
+    data: Optional[UserAuthRequest] = None,
+):
+    cpf = None
+    if data and data.cpf is not None and data.password:
+        ok, reason, user = validate_user_access(cpf=data.cpf, password=data.password)
+        if not ok:
+            raise HTTPException(status_code=401, detail=reason)
+        cpf = data.cpf
+        token = create_user_session(cpf)
+        response.set_cookie(
+            key="sessionid",
+            value=token,
+            httponly=True,
+            samesite="lax",
+            path="/",
+            max_age=24 * 3600,
+        )
+    else:
+        token = request.cookies.get("sessionid")
+        cpf = verify_user_session(token) if token else None
+        if not cpf:
+            raise HTTPException(status_code=401, detail="Sessão expirada ou inválida")
+    return payload.get_payloads(cpf=cpf, length=1)
 
 
 # ==============================================================================
@@ -142,10 +245,80 @@ class AdminUserCreate(BaseModel):
     access_days: Optional[List[int]] = None
     access_hours: Optional[Dict[str, str]] = None
 
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if v == "":
+            return None
+        return v
+
+    @field_validator("access_days")
+    @classmethod
+    def _validate_access_days(cls, v):
+        if v is None:
+            return v
+        for d in v:
+            if not isinstance(d, int) or d < 0 or d > 6:
+                raise ValueError("access_days deve conter inteiros entre 0 e 6")
+        return sorted(set(v))
+
+    @field_validator("access_hours")
+    @classmethod
+    def _validate_access_hours(cls, v):
+        if v is None:
+            return v
+        if not isinstance(v, dict):
+            raise ValueError("access_hours deve ser um objeto")
+        for k in ("start", "end"):
+            if k not in v:
+                raise ValueError("access_hours deve conter start e end")
+            try:
+                from datetime import time
+                time.fromisoformat(v[k])
+            except Exception:
+                raise ValueError(f"Horário inválido em access_hours.{k}")
+        return v
+
+    @field_validator("specific_date", "expiration_date")
+    @classmethod
+    def _validate_date(cls, v):
+        if v is None:
+            return v
+        v = str(v).strip()
+        if v == "":
+            return None
+        try:
+            from datetime import date
+            date.fromisoformat(v[:10])
+        except Exception:
+            raise ValueError("Data inválida (use YYYY-MM-DD)")
+        return v[:10]
+
+    @model_validator(mode="after")
+    def _validate_date_range(self):
+        if not self.is_recurring:
+            if not self.specific_date:
+                raise ValueError("specific_date obrigatório para acesso fixo")
+            if not self.expiration_date:
+                raise ValueError("expiration_date obrigatório para acesso fixo")
+        if self.specific_date and self.expiration_date:
+            from datetime import date
+            s = date.fromisoformat(self.specific_date[:10])
+            e = date.fromisoformat(self.expiration_date[:10])
+            if e < s:
+                raise ValueError("expiration_date não pode ser anterior a specific_date")
+        return self
+
 
 class AdminConfigUpdate(BaseModel):
     payload_batch_size: int
 
+
+class ApiKeyToggleRequest(BaseModel):
+    active: bool
 
 @app.post("/api/admin/login")
 def admin_login(data: AdminLoginRequest):
@@ -204,16 +377,6 @@ def save_admin_user(data: AdminUserCreate):
     return {"status": "success", "cpf": data.cpf}
 
 
-class AdminUserExpirationUpdate(BaseModel):
-    expiration_date: Optional[str] = None
-
-
-@app.put("/api/admin/users/{cpf}/expiration", dependencies=[Depends(require_admin_auth)])
-def update_expiration(cpf: int, data: AdminUserExpirationUpdate):
-    updated_exp = update_user_expiration(cpf, data.expiration_date)
-    return {"status": "success", "cpf": cpf, "expiration_date": updated_exp}
-
-
 @app.delete("/api/admin/users/{cpf}", dependencies=[Depends(require_admin_auth)])
 def delete_user(cpf: int):
     deleted = delete_user_by_cpf(cpf)
@@ -264,7 +427,80 @@ def change_admin_password(data: AdminPasswordChangeRequest, username: str = Depe
     ok = update_admin_password(username, data.new_password.strip())
     if not ok:
         raise HTTPException(status_code=500, detail="Erro ao alterar a senha do administrador")
+    delete_admin_sessions(username)
     return {"status": "success"}
+
+
+# ==============================================================================
+# API KEYS (admin management + external access)
+# ==============================================================================
+
+@app.get("/api/admin/api-key", dependencies=[Depends(require_admin_auth)])
+def get_api_key_info():
+    info = get_api_key()
+    if not info:
+        return {"key": None, "active": False, "created_at": None}
+    return {
+        "key": info["key"],
+        "active": bool(info["active"]),
+        "created_at": info["created_at"],
+    }
+
+
+@app.post("/api/admin/api-key/regenerate", dependencies=[Depends(require_admin_auth)])
+def regenerate_api_key():
+    key = create_or_regenerate_api_key()
+    return {"key": key, "active": True}
+
+
+@app.post("/api/admin/api-key/toggle")
+def toggle_api_key(data: ApiKeyToggleRequest, username: str = Depends(require_admin_auth)):
+    ok = set_api_key_active(data.active)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Nenhuma chave de API encontrada")
+    return {"active": data.active}
+
+
+@app.post("/api/external/users", dependencies=[Depends(require_api_key)])
+def external_save_user(data: AdminUserCreate):
+    existing = get_user_by_cpf(data.cpf)
+    if not existing and not data.password:
+        raise HTTPException(status_code=400, detail="Senha obrigatória para novo usuário")
+    success = add_user(
+        cpf=data.cpf,
+        password=data.password,
+        is_recurring=data.is_recurring,
+        specific_date=data.specific_date,
+        expiration_date=data.expiration_date,
+        access_days=data.access_days,
+        access_hours=data.access_hours,
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail="Erro ao salvar usuário no banco")
+    return {"status": "success", "cpf": data.cpf}
+
+
+@app.delete("/api/external/users/{cpf}", dependencies=[Depends(require_api_key)])
+def external_delete_user(cpf: int):
+    deleted = delete_user_by_cpf(cpf)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    return {"status": "success", "cpf": cpf}
+
+
+@app.get("/admin/docs", include_in_schema=False)
+def admin_docs_page(request: Request, token: Optional[str] = Query(None)):
+    auth_token = token
+    if not auth_token:
+        auth = request.headers.get("authorization")
+        if auth and auth.lower().startswith("bearer "):
+            auth_token = auth[7:]
+    if not auth_token:
+        auth_token = request.headers.get("x-admin-token")
+    if not auth_token or not verify_admin_session(auth_token):
+        return RedirectResponse(url="/admin/")
+    docs_file = Path(__file__).resolve().parent / "docs.html"
+    return HTMLResponse(content=docs_file.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

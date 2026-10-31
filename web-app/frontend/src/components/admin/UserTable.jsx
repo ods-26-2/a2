@@ -10,22 +10,22 @@ export default function UserTable({
   onEditExpiration,
 }) {
   return (
-    <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-xs overflow-hidden">
+    <div className="bg-white rounded-[10px] border border-[#E2E8F0] shadow-xs overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB] text-[12px] font-semibold text-[#4B5563] uppercase tracking-wider">
-              <th className="py-3 px-5">CPF</th>
-              <th className="py-3 px-5">Modalidade</th>
-              <th className="py-3 px-5">Horário Permitido</th>
-              <th className="py-3 px-5">Validade</th>
-              <th className="py-3 px-5 text-right">Ações</th>
+            <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
+              <th className="py-3.5 px-5">CPF</th>
+              <th className="py-3.5 px-5">Modalidade</th>
+              <th className="py-3.5 px-5">Horário Permitido</th>
+              <th className="py-3.5 px-5">Validade</th>
+              <th className="py-3.5 px-5 text-right">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#E5E7EB] text-[13px]">
+          <tbody className="divide-y divide-[#F1F5F9] text-[13px]">
             {users.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-[#9CA3AF]">
+                <td colSpan={5} className="py-12 text-center text-[#94A3B8]">
                   Nenhum usuário encontrado com os filtros selecionados.
                 </td>
               </tr>
@@ -40,20 +40,20 @@ export default function UserTable({
                   : false;
 
                 return (
-                  <tr key={user.cpf} className="hover:bg-[#F9FAFB]/80 transition-colors">
+                  <tr key={user.cpf} className="hover:bg-[#F8FAFC] transition-colors">
                     {/* CPF */}
-                    <td className="py-3.5 px-5 font-mono font-semibold text-[#111827]">
+                    <td className="py-3.5 px-5 font-mono font-semibold text-[#0F172A]">
                       {formatCpfDisplay(user.cpf)}
                     </td>
 
                     {/* Modalidade */}
-                    <td className="py-3.5 px-5 text-[#374151]">
+                    <td className="py-3.5 px-5 text-[#334155]">
                       {user.is_recurring ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[12px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-sm">
+                          <span className="text-[11px] font-semibold text-[#1D4ED8] bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-[4px]">
                             Recorrente
                           </span>
-                          <span className="text-[12px] text-[#4B5563]">
+                          <span className="text-[12px] text-[#64748B]">
                             {Array.isArray(user.access_days) && user.access_days.length > 0
                               ? user.access_days.map((d) => DAY_NAMES[d] || d).join(', ')
                               : 'Sem restrição de dias'}
@@ -61,10 +61,10 @@ export default function UserTable({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[12px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-sm">
+                          <span className="text-[11px] font-semibold text-[#7E22CE] bg-purple-50 border border-purple-200/80 px-2 py-0.5 rounded-[4px]">
                             Data Fixa
                           </span>
-                          <span className="text-[12px] text-[#4B5563]">
+                          <span className="text-[12px] text-[#64748B]">
                             {Array.isArray(user.access_days) && user.access_days.length > 0
                               ? user.access_days.map((d) => DAY_NAMES[d] || d).join(', ')
                               : 'Todos os dias do período'}
@@ -74,35 +74,35 @@ export default function UserTable({
                     </td>
 
                     {/* Horários */}
-                    <td className="py-3.5 px-5 text-[#4B5563]">
+                    <td className="py-3.5 px-5 text-[#475569]">
                       <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                        <Clock className="w-3.5 h-3.5 text-[#94A3B8]" />
                         <span>{hoursText}</span>
                       </div>
                     </td>
 
-                    {/* Validade no lugar de Status */}
+                    {/* Validade */}
                     <td className="py-3.5 px-5">
                       <div className="flex flex-col gap-0.5">
                         {user.specific_date && (
-                          <span className="text-[11px] text-[#6B7280]">
-                            De: <strong className="text-[#374151]">{formatDisplayDate(user.specific_date)}</strong>
+                          <span className="text-[11px] text-[#64748B]">
+                            De: <strong className="text-[#334155]">{formatDisplayDate(user.specific_date)}</strong>
                           </span>
                         )}
                         {user.expiration_date ? (
                           isExpired ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-sm self-start">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-[4px] self-start">
                               <Calendar className="w-3 h-3 text-red-500" />
                               Expirou ({formatDisplayDate(user.expiration_date)})
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-sm self-start">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[4px] self-start">
                               <Calendar className="w-3 h-3 text-emerald-600" />
                               Até {formatDisplayDate(user.expiration_date)}
                             </span>
                           )
                         ) : (
-                          <span className="text-[11px] text-[#9CA3AF]">
+                          <span className="text-[11px] text-[#94A3B8]">
                             Sem expiração definida
                           </span>
                         )}
@@ -111,14 +111,14 @@ export default function UserTable({
 
                     {/* Ações */}
                     <td className="py-3.5 px-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
                           onClick={() => onEditExpiration && onEditExpiration(user)}
                           title="Configurar usuário, horários e validade"
-                          className="px-2.5 py-1 text-[12px] font-semibold rounded-md border border-[#E5E7EB] text-[#374151] hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                          className="h-8 px-2.5 text-[12px] font-medium rounded-[6px] border border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC] hover:text-[#0F172A] hover:border-[#94A3B8] transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
                         >
-                          <Settings2 className="w-3.5 h-3.5 text-[#2563EB]" />
+                          <Settings2 className="w-3.5 h-3.5 text-[#64748B]" />
                           <span>Configurar</span>
                         </button>
 
@@ -126,7 +126,7 @@ export default function UserTable({
                           type="button"
                           onClick={() => onDeleteUser(user.cpf)}
                           title="Excluir usuário"
-                          className="w-7 h-7 rounded-md border border-[#E5E7EB] text-[#9CA3AF] hover:bg-[#FEE2E2] hover:text-[#DC2626] hover:border-[#FCA5A5] flex items-center justify-center transition-all cursor-pointer"
+                          className="w-8 h-8 rounded-[6px] border border-[#CBD5E1] bg-white text-[#94A3B8] hover:bg-red-50 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

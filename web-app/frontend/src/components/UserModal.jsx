@@ -56,6 +56,10 @@ export default function UserModal({ initialUser = null, onClose, onSaved }) {
       setError('Por favor, informe a Data de Início.');
       return;
     }
+    if (!isRecurring && !expirationDate) {
+      setError('Por favor, informe a Data de Término para acesso fixo.');
+      return;
+    }
     if (expirationDate && specificDate && expirationDate < specificDate) {
       setError('A Data de Término / Validade não pode ser anterior à Data de Início.');
       return;
@@ -153,7 +157,7 @@ export default function UserModal({ initialUser = null, onClose, onSaved }) {
                 <div className="relative flex items-center">
                   <Lock className="absolute left-3 w-4 h-4 text-[#9CA3AF] pointer-events-none" />
                   <input
-                    type="text"
+                    type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={isEditing ? '••••••••' : 'Defina a senha'}

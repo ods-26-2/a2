@@ -85,6 +85,33 @@ def _init_schema(conn: sqlite3.Connection):
     """)
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY,
+            key TEXT NOT NULL UNIQUE,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY,
+            key TEXT NOT NULL UNIQUE,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token TEXT PRIMARY KEY,
+            cpf INTEGER NOT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS admin_tokens (
             token TEXT PRIMARY KEY,
             username TEXT NOT NULL,
@@ -384,54 +411,7 @@ def delete_user_by_cpf(cpf: int) -> bool:
         conn.close()
 
 
-def update_user_expiration(
-    cpf: int,
-    expiration_date: Optional[Union[str, date, datetime]] = None,
-    specific_date: Optional[Union[str, date, datetime]] = None,
-) -> Optional[Dict[str, Any]]:
-    """Atualiza a data de validade (e opcionalmente a data inicial) de um usuário específico."""
-    conn = get_connection()
-    try:
-        now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        exp_str = None
-        if expiration_date:
-            if isinstance(expiration_date, (datetime, date)):
-                exp_str = expiration_date.strftime("%Y-%m-%d")
-            else:
-                clean = str(expiration_date).strip()
-                exp_str = clean[:10] if clean else None
 
-        cursor = conn.cursor()
-        if specific_date is not None:
-            if isinstance(specific_date, (datetime, date)):
-                spec_str = specific_date.strftime("%Y-%m-%d")
-            else:
-                clean_s = str(specific_date).strip()
-                spec_str = clean_s[:10] if clean_s else None
-
-            cursor.execute(
-                """
-                UPDATE users
-                SET expiration_date = ?, specific_date = ?, updated_at = ?
-                WHERE cpf = ?
-                """,
-                (exp_str, spec_str, now_dt, int(cpf)),
-            )
-        else:
-            cursor.execute(
-                """
-                UPDATE users
-                SET expiration_date = ?, updated_at = ?
-                WHERE cpf = ?
-                """,
-                (exp_str, now_dt, int(cpf)),
-            )
-        conn.commit()
-        if cursor.rowcount == 0:
-            return None
-        return get_user_by_cpf(int(cpf))
-    finally:
-        conn.close()
 
 
 def update_admin_password(username: str, new_password: str) -> bool:
@@ -521,3 +501,126 @@ def delete_admin_session(token: str) -> bool:
         conn.close()
 
 
+def get_api_key() -> "Optional[Dict[str, Any]]":
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM api_keys ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_or_regenerate_api_key() -> str:
+    import secrets
+    new_key = secrets.token_hex(32)
+    conn = get_connection()
+    try:
+        now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM api_keys ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        if row:
+            cursor.execute(
+                "UPDATE api_keys SET key = ?, active = 1, created_at = ? WHERE id = ?",
+                (new_key, now_dt, row["id"]),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO api_keys (key, active, created_at) VALUES (?, ?, ?)",
+                (new_key, 1, now_dt),
+            )
+        conn.commit()
+        return new_key
+    finally:
+        conn.close()
+
+
+def set_api_key_active(active: bool) -> bool:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE api_keys SET active = ? WHERE id = (SELECT id FROM api_keys ORDER BY id DESC LIMIT 1)",
+            (1 if active else 0,),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def validate_api_key(key: str) -> bool:
+    if not key:
+        return False
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT active FROM api_keys WHERE key = ? LIMIT 1", (key.strip(),))
+        row = cursor.fetchone()
+        return bool(row and row["active"])
+    finally:
+        conn.close()
+
+
+def create_user_session(cpf: int, duration_hours: int = 24) -> str:
+    import secrets
+    token = secrets.token_hex(32)
+    now = datetime.now()
+    now_dt = now.strftime("%Y-%m-%d %H:%M:%S")
+    exp_dt = (now + timedelta(hours=duration_hours)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO user_sessions (token, cpf, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, int(cpf), now_dt, exp_dt),
+        )
+        conn.commit()
+        return token
+    finally:
+        conn.close()
+
+
+def verify_user_session(token: str) -> Optional[int]:
+    if not token:
+        return None
+    conn = get_connection()
+    try:
+        now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT cpf FROM user_sessions WHERE token = ? AND expires_at > ?",
+            (token.strip(), now_dt),
+        )
+        row = cursor.fetchone()
+        return int(row["cpf"]) if row else None
+    finally:
+        conn.close()
+
+
+def delete_user_session(token: str) -> bool:
+    if not token:
+        return False
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user_sessions WHERE token = ?", (token.strip(),))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_admin_sessions(username: str) -> bool:
+    if not username:
+        return False
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM admin_tokens WHERE username = ?", (username.strip(),))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()

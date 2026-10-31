@@ -10,6 +10,8 @@ import {
   getCachedPayload,
   setCachedPayload,
   fetchLatestPayload,
+  fetchUserMe,
+  userLogout,
 } from './services/api';
 import { getAdminSession, clearAdminSession } from './services/adminApi';
 
@@ -40,10 +42,10 @@ export default function App() {
     };
   }, []);
 
-  const syncPayload = useCallback(async (cpf, password) => {
+  const syncPayload = useCallback(async (cpf) => {
     try {
       setLoadingPayload(true);
-      const latest = await fetchLatestPayload(cpf, password);
+      const latest = await fetchLatestPayload(cpf);
       setPayload(latest);
       setCachedPayload(latest);
     } catch (err) {
@@ -59,23 +61,32 @@ export default function App() {
 
   useEffect(() => {
     if (!isAdmin) {
-      const saved = getSavedSession();
-      if (saved?.cpf && saved?.password) {
-        syncPayload(saved.cpf, saved.password);
-      }
+      (async () => {
+        const saved = getSavedSession();
+        if (saved?.cpf) {
+          syncPayload(saved.cpf);
+          return;
+        }
+        const me = await fetchUserMe();
+        if (me?.cpf) {
+          saveSession(me.cpf);
+          setSession({ cpf: me.cpf });
+          syncPayload(me.cpf);
+        }
+      })();
     }
   }, [isAdmin, syncPayload]);
 
   const handleLoginSuccess = async (cpf, password) => {
     const freshPayload = await fetchLatestPayload(cpf, password);
-    saveSession(cpf, password);
+    saveSession(cpf);
     setCachedPayload(freshPayload);
-    setSession({ cpf, password });
+    setSession({ cpf });
     setPayload(freshPayload);
   };
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await userLogout();
     setSession(null);
     setPayload(null);
   };

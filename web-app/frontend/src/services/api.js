@@ -3,23 +3,47 @@ const STORAGE_CACHED_PAYLOAD_KEY = "cracha_cached_payload";
 
 export function getSavedSession() {
   try {
-    const raw = sessionStorage.getItem(STORAGE_SESSION_KEY) || localStorage.getItem(STORAGE_SESSION_KEY);
+    const raw = sessionStorage.getItem(STORAGE_SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
     return null;
   }
 }
 
-export function saveSession(cpf, password) {
-  const payload = JSON.stringify({ cpf, password });
-  sessionStorage.setItem(STORAGE_SESSION_KEY, payload);
-  localStorage.setItem(STORAGE_SESSION_KEY, payload);
+export function saveSession(cpf) {
+  sessionStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify({ cpf }));
 }
 
 export function clearSession() {
   sessionStorage.removeItem(STORAGE_SESSION_KEY);
-  localStorage.removeItem(STORAGE_SESSION_KEY);
   sessionStorage.removeItem(STORAGE_CACHED_PAYLOAD_KEY);
+}
+
+export async function userLogin(cpf, password) {
+  const response = await fetch("/api/user/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ cpf: Number(String(cpf).replace(/\\D/g, "")), password }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "Falha na autenticação");
+  }
+  return response.json();
+}
+
+export async function userLogout() {
+  try {
+    await fetch("/api/user/logout", { method: "POST", credentials: "include" });
+  } catch (_) {}
+  clearSession();
+}
+
+export async function fetchUserMe() {
+  const response = await fetch("/api/user/me", { credentials: "include" });
+  if (!response.ok) return null;
+  return response.json();
 }
 
 export function getCachedPayload() {
@@ -38,7 +62,10 @@ export function setCachedPayload(payload) {
 }
 
 export async function fetchLatestPayload(cpf, password) {
-  const cleanCpf = String(cpf).replace(/\D/g, "");
+  const cleanCpf = cpf ? String(cpf).replace(/\D/g, "") : "";
+  const body = password
+    ? JSON.stringify({ cpf: Number(cleanCpf), password })
+    : (cleanCpf ? JSON.stringify({ cpf: Number(cleanCpf) }) : null);
 
   const response = await fetch("/get-payload", {
     method: "POST",
@@ -46,10 +73,8 @@ export async function fetchLatestPayload(cpf, password) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({
-      cpf: Number(cleanCpf),
-      password,
-    }),
+    credentials: "include",
+    body: body || undefined,
   });
 
   if (!response.ok) {

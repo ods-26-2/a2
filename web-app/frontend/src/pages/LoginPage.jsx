@@ -33,16 +33,21 @@ export default function LoginPage({ onLoginSuccess }) {
   };
 
   return (
-    <div className="w-full h-full flex flex-col justify-center items-center bg-[#F0F0F0] pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] px-5 select-none">
-      <div className="w-full max-w-[380px] py-6 flex flex-col">
+    <div className="w-full h-full flex flex-col justify-center items-center bg-[#F8FAFC] pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] px-5 select-none">
+      <div className="w-full max-w-[390px] py-8 px-6 sm:px-8 bg-white border border-[#E2E8F0] rounded-[16px] shadow-[0_12px_32px_-8px_rgba(15,23,42,0.08)] flex flex-col">
         {/* Brand */}
         <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <QrCode className="w-11 h-11 text-[#1F2937]" strokeWidth={2.2} />
+          <div className="flex justify-center mb-3.5">
+            <div className="w-13 h-13 rounded-[12px] bg-blue-50 text-[#2563EB] flex items-center justify-center border border-blue-100 shadow-2xs">
+              <QrCode className="w-7 h-7" strokeWidth={2.2} />
+            </div>
           </div>
-          <h2 className="text-[22px] font-bold text-[#111827] tracking-[-0.5px]">
-            Acesso
+          <h2 className="text-[20px] font-bold text-[#0F172A] tracking-tight">
+            Controle de Acesso
           </h2>
+          <p className="text-[13px] text-[#64748B] mt-1">
+            Informe suas credenciais para visualizar seu crachá
+          </p>
         </div>
 
         {/* Error box */}

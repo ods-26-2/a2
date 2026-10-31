@@ -5,6 +5,8 @@ import TableToolbar from '../components/admin/TableToolbar';
 import UserTable from '../components/admin/UserTable';
 import ApiConfigCard from '../components/admin/ApiConfigCard';
 import AdminPasswordCard from '../components/admin/AdminPasswordCard';
+import ApiKeysCard from '../components/admin/ApiKeysCard';
+import ApiDocsCard from '../components/admin/ApiDocsCard';
 import UserModal from '../components/UserModal';
 import {
   fetchAdminUsers,
@@ -81,7 +83,7 @@ export default function AdminDashboardPage({ onNavigateToApp, adminUser, onLogou
   }, [users, searchTerm, statusFilter]);
 
   return (
-    <div className="w-full h-full flex bg-[#F0F0F0] text-[#1F2937] overflow-hidden">
+    <div className="w-full h-full flex bg-[#F8FAFC] text-[#0F172A] overflow-hidden">
       <AdminSidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -90,14 +92,9 @@ export default function AdminDashboardPage({ onNavigateToApp, adminUser, onLogou
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <AdminHeader
-          activeTab={activeTab}
-          loading={loading}
-          onRefresh={loadData}
-          adminUser={adminUser}
-        />
+        <AdminHeader activeTab={activeTab} />
 
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-6 sm:p-8">
           <div className="max-w-[1400px] mx-auto space-y-6">
             {activeTab === 'users' ? (
               <>
@@ -127,6 +124,8 @@ export default function AdminDashboardPage({ onNavigateToApp, adminUser, onLogou
                   initialBatchSize={config?.payload_batch_size}
                   onConfigUpdated={loadData}
                 />
+                <ApiKeysCard />
+                <ApiDocsCard />
                 <AdminPasswordCard />
               </div>
             )}

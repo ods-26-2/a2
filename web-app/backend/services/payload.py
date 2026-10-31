@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from datetime import datetime, date, time, timedelta
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 
 backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
@@ -39,7 +39,7 @@ def build_payload_bytes(cpf: int, data_inicial: datetime, data_final: datetime, 
 compress = build_payload_bytes
 
 
-def get_dates(cpf: int, length: int = 1) -> List[List[datetime]]:
+def get_dates(cpf: int, length: int = 1, user: Optional[Dict[str, Any]] = None) -> List[List[datetime]]:
     """Gera as proximas `length` janelas de acesso VALIDAS (nao passadas).
 
     - Recorrente: avanca dia a dia e inclui apenas os dias da semana em `access_days`.
@@ -48,7 +48,8 @@ def get_dates(cpf: int, length: int = 1) -> List[List[datetime]]:
     Janelas cujo horario de fim ja passou (`end <= agora`) sao ignoradas,
     garantindo que a primeira retornada seja a proxima janela valida.
     """
-    user = get_user_by_cpf(cpf)
+    if user is None:
+        user = get_user_by_cpf(cpf)
     if not user or length <= 0:
         return []
 
@@ -120,12 +121,9 @@ def get_payloads(cpf: int, length: int = 1) -> List[Dict[str, Any]]:
 
     if not is_recurring:
         days = (user or {}).get("access_days") or []
-        if days:
-            valid_days_mask = 0
-            for d in days:
-                valid_days_mask |= (1 << int(d))
-        else:
-            valid_days_mask = 0x7F  # todos os dias (comportamento padrao)
+        valid_days_mask = 0
+        for d in days:
+            valid_days_mask |= (1 << int(d))
     else:
         valid_days_mask = 0
 
@@ -138,5 +136,5 @@ def get_payloads(cpf: int, length: int = 1) -> List[Dict[str, Any]]:
             "specificDate": spec_str,
             "isRecurring": is_recurring,
         }
-        for dt_ini, dt_fim in get_dates(cpf, length=length)
+        for dt_ini, dt_fim in get_dates(cpf, length=length, user=user)
     ]
