@@ -8,7 +8,9 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from contextlib import asynccontextmanager
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+from datetime import datetime
+import secrets
 from pydantic import BaseModel, field_validator, model_validator
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, Response, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -40,6 +42,12 @@ from db.connection import (
     create_or_regenerate_api_key,
     set_api_key_active,
     validate_api_key,
+    record_access_event,
+    get_recent_access_events,
+    process_access_event,
+    get_building_metrics,
+    get_building_presence_list,
+    get_user_presence,
 )
 
 @asynccontextmanager
@@ -486,6 +494,157 @@ def external_delete_user(cpf: int):
     if not deleted:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
     return {"status": "success", "cpf": cpf}
+
+
+# ==============================================================================
+# ACCESS EVENTS (catraca / turnstile webhook com chave fixa em .env)
+# ==============================================================================
+
+class AccessEventPayload(BaseModel):
+    cpf: Optional[Union[int, str]] = None
+    direction: Optional[str] = None
+    sentido: Optional[str] = None
+    device_id: Optional[Union[int, str]] = None
+    catraca_id: Optional[Union[int, str]] = None
+    status: Optional[str] = None
+    timestamp: Optional[str] = None
+    key: Optional[str] = None
+    api_key: Optional[str] = None
+
+    model_config = {"extra": "allow"}
+
+
+def check_access_event_auth(request: Request, body_data: Optional[Dict[str, Any]] = None) -> bool:
+    expected_key = getattr(config, "ACCESS_EVENT_KEY", "").strip()
+    if not expected_key:
+        return False
+
+    # 1. Header X-API-Key
+    x_api_key = request.headers.get("x-api-key")
+    if x_api_key and secrets.compare_digest(x_api_key.strip(), expected_key):
+        return True
+
+    # 2. Header Authorization: Bearer <key>
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if token and secrets.compare_digest(token, expected_key):
+            return True
+
+    # 3. Query param ?key=... ou ?api_key=...
+    q_key = request.query_params.get("key") or request.query_params.get("api_key")
+    if q_key and secrets.compare_digest(q_key.strip(), expected_key):
+        return True
+
+    # 4. Campo no corpo JSON: "key" ou "api_key"
+    if body_data and isinstance(body_data, dict):
+        b_key = body_data.get("key") or body_data.get("api_key")
+        if b_key and isinstance(b_key, str) and secrets.compare_digest(b_key.strip(), expected_key):
+            return True
+
+    return False
+
+
+@app.post("/acess-event")
+@app.post("/access-event")
+@app.post("/api/access-event")
+@app.post("/api/acess-event")
+async def receive_access_event(
+    request: Request,
+    data: Optional[AccessEventPayload] = None,
+):
+    body_data: Dict[str, Any] = {}
+    try:
+        raw_json = await request.json()
+        if isinstance(raw_json, dict):
+            body_data = raw_json
+    except Exception:
+        pass
+
+    if data:
+        for k, v in data.model_dump(exclude_unset=True).items():
+            if v is not None:
+                body_data[k] = v
+
+    # Validação estrita da chave fixa gerada no .env
+    if not check_access_event_auth(request, body_data):
+        raise HTTPException(
+            status_code=401,
+            detail="Autenticação obrigatória: chave fixa de eventos ausente ou inválida",
+        )
+
+    raw_cpf = body_data.get("cpf")
+    cpf_val: Optional[int] = None
+    if raw_cpf is not None:
+        try:
+            cpf_cleaned = str(raw_cpf).strip().replace(".", "").replace("-", "")
+            if cpf_cleaned.isdigit():
+                cpf_val = int(cpf_cleaned)
+        except (ValueError, TypeError):
+            cpf_val = None
+
+    direction = body_data.get("direction") or body_data.get("sentido") or "entry"
+    device_id = (
+        body_data.get("device_id")
+        or body_data.get("catraca_id")
+        or body_data.get("device")
+        or body_data.get("catraca")
+    )
+    status = body_data.get("status") or "granted"
+    event_timestamp = (
+        body_data.get("timestamp")
+        or body_data.get("event_timestamp")
+        or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+    # Processamento incremental O(1): atualiza presenca por CPF e contadores do predio
+    result = process_access_event(
+        cpf=cpf_val,
+        direction=str(direction),
+        device_id=str(device_id) if device_id is not None else None,
+        status=str(status),
+        event_timestamp=str(event_timestamp),
+        raw_payload=body_data,
+    )
+
+    return {
+        "status": "success",
+        "message": "Evento de acesso processado e métricas atualizadas",
+        "event_id": result["event_id"],
+        "metrics": result["metrics"],
+        "presence": result["presence"],
+    }
+
+
+@app.get("/api/admin/access-events", dependencies=[Depends(require_admin_auth)])
+def list_access_events(limit: int = 50):
+    return get_recent_access_events(limit=limit)
+
+
+# ==============================================================================
+# DASHBOARD METRICS & BUILDING PRESENCE
+# ==============================================================================
+
+@app.get("/api/admin/dashboard/metrics", dependencies=[Depends(require_admin_auth)])
+def get_dashboard_metrics():
+    return get_building_metrics()
+
+
+@app.get("/api/admin/dashboard/presence", dependencies=[Depends(require_admin_auth)])
+def get_dashboard_presence(
+    is_inside: Optional[bool] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    return get_building_presence_list(is_inside=is_inside, limit=limit, offset=offset)
+
+
+@app.get("/api/admin/dashboard/presence/{cpf}", dependencies=[Depends(require_admin_auth)])
+def get_dashboard_user_presence(cpf: int):
+    data = get_user_presence(cpf)
+    if not data:
+        raise HTTPException(status_code=404, detail="Status de presença não encontrado para este CPF")
+    return data
 
 
 @app.get("/admin/docs", include_in_schema=False)

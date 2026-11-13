@@ -167,3 +167,31 @@ export async function changeAdminPassword(currentPassword, newPassword) {
   });
   return handleResponse(res);
 }
+
+export async function fetchDashboardMetrics() {
+  const res = await fetch('/api/admin/dashboard/metrics', {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function fetchDashboardPresence(isInside = null, limit = 100, offset = 0) {
+  const params = new URLSearchParams();
+  if (isInside !== null && isInside !== undefined) {
+    params.set('is_inside', String(isInside));
+  }
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+
+  const res = await fetch(`/api/admin/dashboard/presence?${params.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(res);
+}
+
+export async function fetchRecentAccessEvents(limit = 20) {
+  const res = await fetch(`/api/admin/access-events?limit=${limit}`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(res);
+}

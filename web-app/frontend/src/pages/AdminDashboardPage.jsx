@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import AdminSidebar from '../components/admin/AdminSidebar';
 import AdminHeader from '../components/admin/AdminHeader';
+import DashboardView from '../components/admin/DashboardView';
 import TableToolbar from '../components/admin/TableToolbar';
 import UserTable from '../components/admin/UserTable';
 import ApiConfigCard from '../components/admin/ApiConfigCard';
@@ -96,7 +97,9 @@ export default function AdminDashboardPage({ onNavigateToApp, adminUser, onLogou
 
         <main className="flex-1 overflow-y-auto p-6 sm:p-8">
           <div className="max-w-[1400px] mx-auto space-y-6">
-            {activeTab === 'users' ? (
+            {activeTab === 'dashboard' ? (
+              <DashboardView />
+            ) : activeTab === 'users' ? (
               <>
                 <TableToolbar
                   searchTerm={searchTerm}
