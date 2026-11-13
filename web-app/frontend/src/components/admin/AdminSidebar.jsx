@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Users, Settings2, QrCode, LogOut } from 'lucide-react';
+import { ShieldCheck, LayoutDashboard, Users, Settings2, QrCode, LogOut } from 'lucide-react';
 import { adminLogout } from '../../services/adminApi';
 
 export default function AdminSidebar({ activeTab, onTabChange, onNavigateToApp, onLogout }) {
@@ -30,6 +30,19 @@ export default function AdminSidebar({ activeTab, onTabChange, onNavigateToApp, 
           >
             <Users className="w-4 h-4" />
             <span>Usuários e Acessos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('dashboard')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[8px] text-[13px] font-semibold transition-all cursor-pointer ${
+              activeTab === 'dashboard'
+                ? 'bg-[#2563EB]/10 text-[#2563EB]'
+                : 'text-[#4B5563] hover:bg-[#F9FAFB] hover:text-[#111827]'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span>Dashboard</span>
           </button>
 
           <button

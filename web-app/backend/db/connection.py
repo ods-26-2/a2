@@ -119,6 +119,51 @@ def _init_schema(conn: sqlite3.Connection):
             expires_at DATETIME NOT NULL
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS access_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cpf INTEGER,
+            direction TEXT,
+            device_id TEXT,
+            status TEXT,
+            event_timestamp DATETIME,
+            raw_payload TEXT,
+            created_at DATETIME NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS building_presence (
+            cpf INTEGER PRIMARY KEY,
+            is_inside INTEGER NOT NULL DEFAULT 0,
+            last_direction TEXT,
+            last_device_id TEXT,
+            last_entry_at DATETIME,
+            last_exit_at DATETIME,
+            updated_at DATETIME NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_presence_is_inside ON building_presence(is_inside)")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS building_metrics (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            people_count INTEGER NOT NULL DEFAULT 0,
+            total_entries_today INTEGER NOT NULL DEFAULT 0,
+            total_exits_today INTEGER NOT NULL DEFAULT 0,
+            metric_date DATE NOT NULL,
+            last_event_at DATETIME,
+            updated_at DATETIME NOT NULL
+        )
+    """)
+
+    today_dt = datetime.now().strftime("%Y-%m-%d")
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+        INSERT OR IGNORE INTO building_metrics (id, people_count, total_entries_today, total_exits_today, metric_date, last_event_at, updated_at)
+        VALUES (1, 0, 0, 0, ?, NULL, ?)
+    """, (today_dt, now_dt))
     conn.commit()
 
     cursor.execute("SELECT COUNT(*) FROM users")
@@ -624,3 +669,318 @@ def delete_admin_sessions(username: str) -> bool:
         return cursor.rowcount > 0
     finally:
         conn.close()
+
+
+def record_access_event(
+    cpf: Optional[int] = None,
+    direction: Optional[str] = None,
+    device_id: Optional[str] = None,
+    status: Optional[str] = "granted",
+    event_timestamp: Optional[str] = None,
+    raw_payload: Optional[Dict[str, Any]] = None,
+) -> int:
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ts = event_timestamp or now_dt
+    raw_json = json.dumps(raw_payload or {}, ensure_ascii=False)
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO access_events (cpf, direction, device_id, status, event_timestamp, raw_payload, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(cpf) if cpf is not None else None,
+                direction,
+                str(device_id) if device_id is not None else None,
+                status,
+                ts,
+                raw_json,
+                now_dt,
+            ),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_recent_access_events(limit: int = 50) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM access_events
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (max(1, min(limit, 500)),),
+        )
+        rows = cursor.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            if d.get("raw_payload"):
+                try:
+                    d["raw_payload"] = json.loads(d["raw_payload"])
+                except Exception:
+                    pass
+            result.append(d)
+        return result
+    finally:
+        conn.close()
+
+
+def process_access_event(
+    cpf: Optional[int] = None,
+    direction: Optional[str] = None,
+    device_id: Optional[str] = None,
+    status: Optional[str] = "granted",
+    event_timestamp: Optional[str] = None,
+    raw_payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Processa um evento de acesso de forma incremental (O(1)).
+    
+    Atualiza:
+    1. access_events: log completo do evento
+    2. building_presence: tabela indexada por CPF informando se está dentro (is_inside=1) ou fora (0)
+    3. building_metrics: contador de pessoas presentes e totais diários (sem recalcular histórico)
+    """
+    now_dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    today_dt = datetime.now().strftime("%Y-%m-%d")
+    ts = event_timestamp or now_dt
+
+    # Normalização de status e direção
+    st = (status or "granted").strip().lower()
+    is_granted = st in ("granted", "liberado", "autorizado", "ok", "success", "1", "true")
+
+    d = (direction or "entrada").strip().lower()
+    is_entry = d in ("entrada", "entry", "in", "e", "1")
+    resolved_direction = "entrada" if is_entry else "saida"
+
+    raw_json = json.dumps(raw_payload or {}, ensure_ascii=False)
+
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        # 1. Grava no log de eventos
+        cursor.execute(
+            """
+            INSERT INTO access_events (cpf, direction, device_id, status, event_timestamp, raw_payload, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(cpf) if cpf is not None else None,
+                resolved_direction,
+                str(device_id) if device_id is not None else None,
+                status or "granted",
+                ts,
+                raw_json,
+                now_dt,
+            ),
+        )
+        event_id = cursor.lastrowid
+
+        # 2. Carrega métricas atuais
+        cursor.execute("SELECT people_count, total_entries_today, total_exits_today, metric_date FROM building_metrics WHERE id = 1")
+        row_metrics = cursor.fetchone()
+        if row_metrics:
+            current_people = row_metrics["people_count"]
+            entries_today = row_metrics["total_entries_today"]
+            exits_today = row_metrics["total_exits_today"]
+            metric_date = row_metrics["metric_date"]
+        else:
+            current_people = 0
+            entries_today = 0
+            exits_today = 0
+            metric_date = today_dt
+
+        # Reseta acumuladores se mudou o dia (mas mantém contagem atual de ocupação)
+        if metric_date != today_dt:
+            entries_today = 0
+            exits_today = 0
+            metric_date = today_dt
+
+        delta_people = 0
+        delta_entries = 0
+        delta_exits = 0
+        is_inside_now = None
+
+        # 3. Se acesso foi liberado/válido, atualiza presença e contador
+        if is_granted:
+            if cpf is not None:
+                cpf_int = int(cpf)
+                cursor.execute("SELECT is_inside FROM building_presence WHERE cpf = ?", (cpf_int,))
+                row_presence = cursor.fetchone()
+                was_inside = bool(row_presence["is_inside"]) if row_presence else False
+
+                if is_entry:
+                    # Entrando: se ainda não constava como dentro, incrementa
+                    if not was_inside:
+                        delta_people = 1
+                    delta_entries = 1
+                    is_inside_now = 1
+
+                    cursor.execute(
+                        """
+                        INSERT INTO building_presence (cpf, is_inside, last_direction, last_device_id, last_entry_at, updated_at)
+                        VALUES (?, 1, ?, ?, ?, ?)
+                        ON CONFLICT(cpf) DO UPDATE SET
+                            is_inside = 1,
+                            last_direction = excluded.last_direction,
+                            last_device_id = excluded.last_device_id,
+                            last_entry_at = excluded.last_entry_at,
+                            updated_at = excluded.updated_at
+                        """,
+                        (cpf_int, resolved_direction, str(device_id) if device_id else None, ts, now_dt),
+                    )
+                else:
+                    # Saindo: se constava como dentro, decrementa
+                    if was_inside:
+                        delta_people = -1
+                    elif current_people > 0:
+                        delta_people = -1
+                    delta_exits = 1
+                    is_inside_now = 0
+
+                    cursor.execute(
+                        """
+                        INSERT INTO building_presence (cpf, is_inside, last_direction, last_device_id, last_exit_at, updated_at)
+                        VALUES (?, 0, ?, ?, ?, ?)
+                        ON CONFLICT(cpf) DO UPDATE SET
+                            is_inside = 0,
+                            last_direction = excluded.last_direction,
+                            last_device_id = excluded.last_device_id,
+                            last_exit_at = excluded.last_exit_at,
+                            updated_at = excluded.updated_at
+                        """,
+                        (cpf_int, resolved_direction, str(device_id) if device_id else None, ts, now_dt),
+                    )
+            else:
+                # Caso sem CPF (identificação anônima da catraca)
+                if is_entry:
+                    delta_people = 1
+                    delta_entries = 1
+                else:
+                    delta_people = -1 if current_people > 0 else 0
+                    delta_exits = 1
+
+        new_people_count = max(0, current_people + delta_people)
+        new_entries_today = entries_today + delta_entries
+        new_exits_today = exits_today + delta_exits
+
+        # 4. Atualização O(1) do contador global do prédio
+        cursor.execute(
+            """
+            INSERT INTO building_metrics (id, people_count, total_entries_today, total_exits_today, metric_date, last_event_at, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                people_count = excluded.people_count,
+                total_entries_today = excluded.total_entries_today,
+                total_exits_today = excluded.total_exits_today,
+                metric_date = excluded.metric_date,
+                last_event_at = excluded.last_event_at,
+                updated_at = excluded.updated_at
+            """,
+            (new_people_count, new_entries_today, new_exits_today, metric_date, ts, now_dt),
+        )
+
+        conn.commit()
+
+        return {
+            "event_id": event_id,
+            "metrics": {
+                "people_count": new_people_count,
+                "total_entries_today": new_entries_today,
+                "total_exits_today": new_exits_today,
+                "metric_date": metric_date,
+                "last_event_at": ts,
+            },
+            "presence": {
+                "cpf": int(cpf) if cpf is not None else None,
+                "is_inside": is_inside_now,
+                "direction": resolved_direction,
+                "status": status or "granted",
+            } if cpf is not None else None,
+        }
+    finally:
+        conn.close()
+
+
+def get_building_metrics() -> Dict[str, Any]:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        today_dt = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("SELECT * FROM building_metrics WHERE id = 1")
+        row = cursor.fetchone()
+        if not row:
+            return {
+                "people_count": 0,
+                "total_entries_today": 0,
+                "total_exits_today": 0,
+                "metric_date": today_dt,
+                "last_event_at": None,
+            }
+        d = dict(row)
+        if d.get("metric_date") != today_dt:
+            # Novo dia, reseta contadores diários em visualização
+            d["total_entries_today"] = 0
+            d["total_exits_today"] = 0
+            d["metric_date"] = today_dt
+        return d
+    finally:
+        conn.close()
+
+
+def get_building_presence_list(
+    is_inside: Optional[bool] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        params = []
+        where_clause = ""
+        if is_inside is not None:
+            where_clause = "WHERE is_inside = ?"
+            params.append(1 if is_inside else 0)
+
+        cursor.execute(f"SELECT COUNT(*) FROM building_presence {where_clause}", tuple(params))
+        total = cursor.fetchone()[0]
+
+        query = f"""
+            SELECT p.cpf, p.is_inside, p.last_direction, p.last_device_id, p.last_entry_at, p.last_exit_at, p.updated_at
+            FROM building_presence p
+            {where_clause}
+            ORDER BY p.updated_at DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([max(1, min(limit, 500)), max(0, offset)])
+        cursor.execute(query, tuple(params))
+        rows = [dict(r) for r in cursor.fetchall()]
+
+        return {
+            "total": total,
+            "items": rows,
+            "limit": limit,
+            "offset": offset,
+        }
+    finally:
+        conn.close()
+
+
+def get_user_presence(cpf: int) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM building_presence WHERE cpf = ?", (int(cpf),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
