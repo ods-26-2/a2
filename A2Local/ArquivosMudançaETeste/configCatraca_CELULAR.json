@@ -1,0 +1,21 @@
+{
+  "monitor": {
+    "bind_host": "0.0.0.0",
+    "hostname": "192.168.10.10",
+    "port": 8000,
+    "path": "api/notifications"
+  },
+  "devices": [
+    {
+      "turnstile_id": "catraca-01",
+      "model": "mobile",
+      "protocol": "http",
+      "host": "192.168.10.150",
+      "port": 8080,
+      "device_id": "mobile-catraca-01",
+      "gateway": "clockwise",
+      "direction": "both",
+      "request_timeout": 5
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+confluent-kafka
+requests
+fastapi
+uvicorn
+cryptography

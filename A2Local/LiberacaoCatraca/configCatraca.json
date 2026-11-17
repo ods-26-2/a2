@@ -1,22 +1,22 @@
 {
+  "monitor": {
+    "bind_host": "0.0.0.0",
+    "hostname": "192.168.2.118",
+    "port": 8000,
+    "path": "api/notifications"
+  },
+
   "devices": [
     {
       "turnstile_id": "catraca-01",
-      "model": "simulated",
-      "protocol": "simulation",
-      "simulation": {
-        "pass_after": 2,
-        "direction": "entrada"
-      }
-    },
-    {
-      "turnstile_id": "catraca-02",
-      "model": "simulated",
-      "protocol": "simulation",
-      "simulation": {
-        "pass_after": 2,
-        "direction": "saida"
-      }
+      "model": "mobile",
+      "protocol": "http",
+      "host": "10.0.0.205",
+      "port": 8080,
+      "device_id": "mobile-catraca-01",
+      "gateway": "clockwise",
+      "direction": "both",
+      "request_timeout": 5
     }
   ]
 }

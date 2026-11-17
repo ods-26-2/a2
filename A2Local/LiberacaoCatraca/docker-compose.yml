@@ -1,0 +1,28 @@
+services:
+  a2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: ods-a2:5.0
+    container_name: ods-a2
+
+    env_file:
+      - .env
+
+    environment:
+      A2_DATABASE_FILE: /app/data/acessos.db
+      A2_LOG_API_HOST: 0.0.0.0
+      A2_LOG_API_PORT: 8001
+
+    volumes:
+      - ./data:/app/data
+      - ./catracas.json:/app/catracas.json:ro
+      - ./configCatraca.json:/app/configCatraca.json:ro
+
+    ports:
+      - "${A2_MONITOR_BIND_IP:-0.0.0.0}:8000:8000"
+      - "${A2_LOG_API_BIND_IP:-0.0.0.0}:8001:8001"
+
+    restart: unless-stopped
+    init: true
