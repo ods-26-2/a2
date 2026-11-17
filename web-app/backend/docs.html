@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documentacao da API</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 24px; color: #1F2937; line-height: 1.5; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 16px; margin-top: 20px; }
+    p { font-size: 14px; color: #4B5563; }
+    code { background: #F3F4F6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    pre { background: #1F2937; color: #E5E7EB; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Documentacao da API</h1>
+  <p>Endpoints liberados para uso com chave de API (header X-API-Key).</p>
+
+  <h2>Autenticacao</h2>
+  <p>Envie a chave no header X-API-Key em todas as requisicoes.</p>
+  <pre>curl -X POST https://seu-dominio/api/external/users \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: SUA_CHAVE" \
+  -d '{"cpf":12345678900,"password":"senha","is_recurring":true}'</pre>
+
+  <h2>POST /api/external/users</h2>
+  <p>Cria ou atualiza um usuario. A validade e a data de inicio podem ser enviadas no mesmo body.</p>
+  <pre>{
+  "cpf": 12345678900,
+  "password": "senha123",
+  "is_recurring": true,
+  "specific_date": "2026-10-29",
+  "expiration_date": "2026-12-31",
+  "access_days": [0, 1, 2, 3, 4],
+  "access_hours": { "start": "08:00", "end": "18:00" }
+}</pre>
+  <p>access_days: dias autorizados (0=Seg ... 6=Dom). Lista vazia gera mascara de dias = 0.</p>
+  <p>expiration_date: obrigatorio para acesso fixo (data de termino).</p>
+
+  <h2>DELETE /api/external/users/{cpf}</h2>
+  <p>Remove um usuario pelo CPF.</p>
+  <pre>curl -X DELETE https://seu-dominio/api/external/users/12345678900 \
+  -H "X-API-Key: SUA_CHAVE"</pre>
+</body>
+</html>
