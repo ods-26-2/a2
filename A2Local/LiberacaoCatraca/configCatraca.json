@@ -11,7 +11,7 @@
       "turnstile_id": "catraca-01",
       "model": "mobile",
       "protocol": "http",
-      "host": "10.0.0.205",
+      "host": "192.168.2.134",
       "port": 8080,
       "device_id": "mobile-catraca-01",
       "gateway": "clockwise",

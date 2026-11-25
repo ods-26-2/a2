@@ -195,4 +195,44 @@ def ensure_access_logs_schema(
         """
     )
 
+    # Outbox persistente: o registro local e a fila de envio são
+    # gravados na mesma transação, sem fazer chamadas HTTP aqui.
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cloud_access_outbox (
+            log_id INTEGER PRIMARY KEY,
+            cpf TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            turnstile_id TEXT NOT NULL,
+            occurred_at INTEGER NOT NULL,
+            sent_at INTEGER,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT
+        )
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_cloud_access_pending
+        ON cloud_access_outbox(sent_at, log_id)
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_access_logs_cloud_outbox
+        AFTER INSERT ON access_logs
+        WHEN NEW.direction IN ('entrada', 'saida')
+        BEGIN
+            INSERT INTO cloud_access_outbox (
+                log_id, cpf, direction, turnstile_id, occurred_at
+            ) VALUES (
+                NEW.id, NEW.cpf, NEW.direction,
+                NEW.turnstile_id, NEW.occurred_at
+            );
+        END
+        """
+    )
+
     connection.commit()
