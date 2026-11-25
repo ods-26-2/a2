@@ -1,24 +1,30 @@
 import html
+import json
 import os
 import sqlite3
 import threading
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from datetime import (
     datetime,
+    timedelta,
     timedelta,
     timezone
 )
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 from typing import Optional
+from urllib.parse import urlsplit
 
+import requests
 import uvicorn
 from fastapi import (
     FastAPI,
     HTTPException,
     Query
 )
+from fastapi.responses import HTMLResponse
 from fastapi.responses import HTMLResponse
 
 from database import (
@@ -72,6 +78,19 @@ API_PORT = int(
         "8001"
     )
 )
+
+
+LOCAL_TIMEZONE_NAME = os.getenv(
+    "A2_LOCAL_TIMEZONE",
+    "America/Sao_Paulo"
+)
+
+try:
+    LOCAL_TIMEZONE = ZoneInfo(
+        LOCAL_TIMEZONE_NAME
+    )
+except Exception:
+    LOCAL_TIMEZONE = timezone.utc
 
 
 LOCAL_TIMEZONE_NAME = os.getenv(
@@ -143,7 +162,22 @@ def cleanup_old_logs():
             cursor.rowcount
         )
 
+        expired_pending = connection.execute(
+            """
+            SELECT COUNT(*) FROM cloud_access_outbox
+            WHERE occurred_at < ? AND sent_at IS NULL
+            """,
+            (cutoff,)
+        ).fetchone()[0]
+
+        connection.execute(
+            "DELETE FROM cloud_access_outbox WHERE occurred_at < ?",
+            (cutoff,)
+        )
         connection.commit()
+
+    if expired_pending:
+        print(f"[A2 Nuvem] {expired_pending} envio(s) pendente(s) expiraram pela retenção.", flush=True)
 
     if deleted > 0:
         print(
@@ -155,6 +189,141 @@ def cleanup_old_logs():
         )
 
     return deleted
+
+
+# ============================================================
+# SINCRONIZAÇÃO A2 LOCAL -> A2 NUVEM
+# ============================================================
+
+
+def cloud_settings():
+    """Lê a configuração sem impedir a inicialização da API local."""
+    enabled = os.getenv("A2_CLOUD_SYNC_ENABLED", "false").lower() == "true"
+    if not enabled:
+        return None, "desativada"
+
+    url = os.getenv("A2_CLOUD_ACCESS_URL", "").strip()
+    key = os.getenv("ACCESS_EVENT_KEY", "").strip()
+    if not url or not key:
+        return None, "Configure A2_CLOUD_ACCESS_URL e ACCESS_EVENT_KEY."
+
+    try:
+        parsed = urlsplit(url)
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname
+                or parsed.username or parsed.password or parsed.fragment):
+            raise ValueError("URL inválida")
+        # Verifica inclusive se a porta é válida.
+        _ = parsed.port
+        retry = float(os.getenv("A2_CLOUD_RETRY_SECONDS", "10"))
+        poll = float(os.getenv("A2_CLOUD_POLL_SECONDS", "2"))
+        if not (1 <= retry <= 3600 and 0.2 <= poll <= 60):
+            raise ValueError("intervalo inválido")
+        mapping = json.loads(os.getenv("A2_CLOUD_TURNSTILE_MAP", "{}"))
+        if not isinstance(mapping, dict) or not all(
+            isinstance(value, str) and value.strip() for value in mapping.values()
+        ):
+            raise ValueError("mapeamento inválido")
+    except (ValueError, TypeError):
+        return None, "URL, intervalo ou mapeamento de catracas inválido."
+
+    return {
+        "url": url,
+        "key": key,
+        "retry": retry,
+        "poll": poll,
+        "mapping": mapping,
+    }, None
+
+
+def next_cloud_event():
+    # FIFO: preserva a ordem das passagens, inclusive após falhas.
+    # Não mantém uma transação SQLite aberta durante a requisição HTTP.
+    with closing(get_connection()) as connection:
+        return connection.execute(
+            """
+            SELECT log_id, cpf, direction, turnstile_id
+            FROM cloud_access_outbox
+            WHERE sent_at IS NULL
+            ORDER BY log_id
+            LIMIT 1
+            """
+        ).fetchone()
+
+
+def update_cloud_event(log_id, error=None):
+    with closing(get_connection()) as connection, connection:
+        connection.execute(
+            """
+            UPDATE cloud_access_outbox
+            SET attempts = attempts + 1,
+                last_error = ?,
+                sent_at = ?
+            WHERE log_id = ? AND sent_at IS NULL
+            """,
+            (error, int(time.time()) if error is None else None, log_id)
+        )
+
+
+def send_cloud_event(session, row, settings):
+    """Retorna None em caso de sucesso, ou erro sem CPF/chave de API."""
+    cpf = str(row["cpf"])
+    if len(cpf) != 11 or not cpf.isascii() or not cpf.isdigit():
+        return "CPF inválido no registro local"
+
+    local_id = row["turnstile_id"]
+    payload = {
+        "sentido": row["direction"],
+        "cpf": int(cpf),
+        "catraca_id": settings["mapping"].get(local_id, local_id),
+    }
+
+    try:
+        with session.post(
+            settings["url"],
+            json=payload,
+            headers={"X-API-Key": settings["key"],
+                     "Content-Type": "application/json"},
+            timeout=(3, 5),
+            allow_redirects=False,
+        ) as response:
+            if 200 <= response.status_code < 300:
+                return None
+            return f"HTTP {response.status_code}"
+    except requests.RequestException as error:
+        # Não imprime a chave, o CPF, o payload ou o corpo remoto.
+        return type(error).__name__
+
+
+def cloud_sync_worker(stop_event, settings):
+    print("[A2 Nuvem] Sincronização iniciada.", flush=True)
+    if urlsplit(settings["url"]).scheme == "http":
+        print("[A2 Nuvem] AVISO: HTTP sem criptografia; use HTTPS/VPN em produção.", flush=True)
+
+    with requests.Session() as session:
+        while not stop_event.is_set():
+            delay = settings["poll"]
+            try:
+                row = next_cloud_event()
+                if row is not None:
+                    if stop_event.is_set():
+                        break
+                    error = send_cloud_event(session, row, settings)
+                    update_cloud_event(row["log_id"], error)
+                    if error is None:
+                        print(f"[A2 Nuvem] Log {row['log_id']} enviado.", flush=True)
+                        # Continua imediatamente enquanto houver registros.
+                        continue
+                    print(
+                        f"[A2 Nuvem] Log {row['log_id']} pendente: {error}. "
+                        f"Nova tentativa em {settings['retry']:g}s.",
+                        flush=True,
+                    )
+                    delay = settings["retry"]
+            except Exception as error:
+                # Erros locais/HTTP nunca encerram a API ou o worker.
+                print(f"[A2 Nuvem] Falha no worker: {type(error).__name__}.", flush=True)
+                delay = settings["retry"]
+            stop_event.wait(delay)
 
 
 def parse_time_filter(
@@ -344,6 +513,19 @@ async def lifespan(
 
     cleanup_thread.start()
 
+    cloud_thread = None
+    settings, config_error = cloud_settings()
+    if settings is not None:
+        cloud_thread = threading.Thread(
+            target=cloud_sync_worker,
+            args=(stop_event, settings),
+            name="a2-cloud-sync",
+            daemon=True,
+        )
+        cloud_thread.start()
+    elif config_error != "desativada":
+        print(f"[A2 Nuvem] {config_error}", flush=True)
+
     try:
         yield
 
@@ -353,11 +535,14 @@ async def lifespan(
         cleanup_thread.join(
             timeout=1
         )
+        if cloud_thread is not None:
+            cloud_thread.join(timeout=10)
+
 
 
 app = FastAPI(
     title="API Local de Acessos",
-    version="1.3",
+    version="1.4",
     lifespan=lifespan
 )
 
@@ -377,6 +562,39 @@ def health():
 
         "retention_days":
             RETENTION_DAYS
+    }
+
+
+@app.get("/sincronizacao")
+def cloud_sync_status():
+    """Estado do envio à nuvem, sem expor CPFs ou a chave da API."""
+    settings, config_error = cloud_settings()
+    with closing(get_connection()) as connection:
+        counts = connection.execute(
+            """
+            SELECT COUNT(*) AS total,
+                   COALESCE(SUM(CASE WHEN sent_at IS NULL THEN 1 ELSE 0 END), 0) AS pending,
+                   MAX(sent_at) AS last_sent_at
+            FROM cloud_access_outbox
+            """
+        ).fetchone()
+        next_event = connection.execute(
+            """
+            SELECT log_id, attempts, last_error
+            FROM cloud_access_outbox
+            WHERE sent_at IS NULL
+            ORDER BY log_id LIMIT 1
+            """
+        ).fetchone()
+
+    return {
+        "habilitada": settings is not None,
+        "configuracao": config_error or "ok",
+        "pendentes": counts["pending"],
+        "enviados": counts["total"] - counts["pending"],
+        "ultimo_envio": counts["last_sent_at"],
+        "proximo_registro": dict(next_event) if next_event is not None else None,
+        "retencao_dias": RETENTION_DAYS,
     }
 
 
