@@ -1,0 +1,54 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# Variáveis de ambiente locais e logs
+.env
+*.env
+*.log
+*.pid
+
+# Banco de dados local (deve ser criado no container ou montado via volume)
+backend/db/db.db
+backend/db/*.db
+backend/db/*.sqlite
+backend/db/*.sqlite3
+backend/db/data/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Documentação de design e testes locais
+design-system.md

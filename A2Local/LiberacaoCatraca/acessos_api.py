@@ -8,9 +8,11 @@ from contextlib import asynccontextmanager, closing
 from datetime import (
     datetime,
     timedelta,
+    timedelta,
     timezone
 )
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
 from typing import Optional
 from urllib.parse import urlsplit
@@ -22,6 +24,7 @@ from fastapi import (
     HTTPException,
     Query
 )
+from fastapi.responses import HTMLResponse
 from fastapi.responses import HTMLResponse
 
 from database import (
@@ -75,6 +78,19 @@ API_PORT = int(
         "8001"
     )
 )
+
+
+LOCAL_TIMEZONE_NAME = os.getenv(
+    "A2_LOCAL_TIMEZONE",
+    "America/Sao_Paulo"
+)
+
+try:
+    LOCAL_TIMEZONE = ZoneInfo(
+        LOCAL_TIMEZONE_NAME
+    )
+except Exception:
+    LOCAL_TIMEZONE = timezone.utc
 
 
 LOCAL_TIMEZONE_NAME = os.getenv(

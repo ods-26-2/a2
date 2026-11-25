@@ -4,7 +4,7 @@ set -e
 
 PID_FILE="./app.pid"
 LOG_FILE="./app.log"
-PORT=8080
+PORT="${PORT:-8080}"
 
 case "$1" in
 
@@ -18,6 +18,11 @@ case "$1" in
       fi
 
       rm -f "$PID_FILE"
+    fi
+
+    echo "Building frontend..."
+    if [ -d "frontend" ]; then
+      (cd frontend && npm ci && npm run build) || { echo "Frontend build failed"; exit 1; }
     fi
 
     echo "Starting application on port $PORT..."

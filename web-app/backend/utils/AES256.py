@@ -1,8 +1,16 @@
-import os
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import sys
+from pathlib import Path
 from typing import Union
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-key = b"a"*32  # chave temporária
+# Garante path do backend para importar config
+backend_dir = Path(__file__).resolve().parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+import config
+
+key = getattr(config, "AES_KEY", b"a" * 32)
 
 
 def encrypt(data: Union[bytes, str]) -> bytes:
